@@ -1,10 +1,15 @@
 import asyncio
 
-from pyrogram import idle
+try:
+    asyncio.get_event_loop()
+except RuntimeError:
+    asyncio.set_event_loop(asyncio.new_event_loop())
 
-from bot import Bot, CLONES, start_clone
-from config import LOGGER
-from database.database import db
+from pyrogram import idle  # noqa: E402
+
+from bot import Bot, CLONES, start_clone  # noqa: E402
+from config import LOGGER  # noqa: E402
+from database.database import db  # noqa: E402
 
 
 async def main():
