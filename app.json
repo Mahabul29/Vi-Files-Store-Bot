@@ -1,0 +1,26 @@
+{
+  "name": "Files Store Bot",
+  "description": "Telegram file store bot with special links, auto delete, force sub and clone support",
+  "keywords": ["telegram", "pyrogram", "file-store"],
+  "env": {
+    "API_HASH": {"description": "Your API Hash from my.telegram.org"},
+    "APP_ID": {"description": "Your API ID from my.telegram.org"},
+    "BOT_TOKEN": {"description": "Bot token from @BotFather"},
+    "OWNER_ID": {"description": "Your Telegram user id"},
+    "CHANNEL_ID": {"description": "DB channel id, e.g. -100xxxxxxxxxx"},
+    "DB_URL": {"description": "MongoDB connection url"},
+    "DB_NAME": {"description": "MongoDB database name", "value": "FilesStoreBot"},
+    "FILE_AUTO_DELETE": {"description": "Auto delete delay in seconds (0 = off)", "value": "0", "required": false},
+    "ADMINS": {"description": "Space separated admin user ids", "required": false},
+    "FORCE_SUB_CHANNEL": {"description": "Force sub channel 1 id (0 = off)", "value": "0", "required": false},
+    "FORCE_SUB_CHANNEL_2": {"description": "Force sub channel 2 id (0 = off)", "value": "0", "required": false},
+    "FORCE_SUB_CHANNEL_3": {"description": "Force sub channel 3 id (0 = off)", "value": "0", "required": false},
+    "FORCE_SUB_CHANNEL_4": {"description": "Force sub channel 4 id (0 = off)", "value": "0", "required": false},
+    "PROTECT_CONTENT": {"description": "True to block forwarding/saving", "value": "False", "required": false},
+    "START_PIC": {"description": "Start picture url/file_id", "required": false},
+    "FORCE_PIC": {"description": "Force sub picture url/file_id", "required": false},
+    "START_MESSAGE": {"description": "Start message (HTML; {first} {last} {username} {mention} {id})", "required": false},
+    "FORCE_SUB_MESSAGE": {"description": "Force sub message (HTML; same fillings)", "required": false}
+  },
+  "stack": "container"
+}
