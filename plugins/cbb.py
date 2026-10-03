@@ -1,8 +1,8 @@
+from pyrogram import filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot import Bot
-from config import START_MESSAGE
-from plugins.start import START_BUTTONS, fill
+from helper_func import START_BUTTONS, fill
 
 
 async def _edit(query, text, markup):
@@ -12,7 +12,7 @@ async def _edit(query, text, markup):
         await query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
 
 
-@Bot.on_callback_query()
+@Bot.on_callback_query(filters.regex(r"^(about|start|close)$"))
 async def cb_handler(client, query):
     data = query.data
     if data == "about":
@@ -26,7 +26,7 @@ async def cb_handler(client, query):
             ]]),
         )
     elif data == "start":
-        await _edit(query, fill(START_MESSAGE, query.from_user), START_BUTTONS)
+        await _edit(query, fill(client.cfg["start_msg"], query.from_user), START_BUTTONS)
     elif data == "close":
         await query.message.delete()
         try:
