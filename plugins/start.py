@@ -16,7 +16,6 @@ from helper_func import (
     START_BUTTONS, admins, decode, fill, get_messages, get_readable_time,
     get_unjoined, is_admin, subscribed,
 )
-from plugins.settings import menu_markup, menu_text
 
 MIN_VERIFY_SECONDS = 10  # anti-bypass: verification can't complete faster than this
 
@@ -115,7 +114,7 @@ async def deliver(client, message, payload):
         return await message.reply_text("❌ Invalid or broken link.", quote=True)
 
     # Clones sharing the main DB channel can only deliver files stored through them
-    if client.is_clone and ch == CHANNEL_ID:
+    if client.is_clone:
         ids = await db.owned_ids(client.bot_id, ids)
 
     temp = await message.reply_text("⏳ Please wait...", quote=True)
@@ -158,13 +157,6 @@ async def start_command(client, message):
     admin = is_admin(client, uid)
     await db.add_user(client.bot_id, uid)
     payload = message.command[1] if len(message.command) > 1 else None
-
-    # Clone owner -> customize panel
-    if client.is_clone and uid == client.owner_id and not payload:
-        return await message.reply_text(
-            menu_text(client), reply_markup=menu_markup(client),
-            disable_web_page_preview=True, quote=True,
-        )
 
     if not cfg["active"] and not admin:
         return await message.reply_text("🚫 This bot is currently deactivated by its owner.", quote=True)
