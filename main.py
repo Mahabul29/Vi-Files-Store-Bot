@@ -8,7 +8,7 @@ except RuntimeError:
 from pyrogram import idle  # noqa: E402
 
 from bot import Bot, CLONES, start_clone  # noqa: E402
-from config import LOGGER  # noqa: E402
+from config import LOGGER, OWNER_ID  # noqa: E402
 from database.database import db  # noqa: E402
 
 
@@ -18,7 +18,7 @@ async def main():
 
     for doc in await db.get_clones():
         try:
-            await start_clone(doc["token"])
+            await start_clone(doc["token"], doc.get("owner", OWNER_ID))
         except Exception as e:
             LOGGER.warning(f"Clone {doc['_id']} failed to start: {e}")
 
