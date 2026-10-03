@@ -1,4 +1,4 @@
-"""Clone management panel — controlled entirely from the MAIN bot."""
+"""Clone management panel â€” controlled entirely from the MAIN bot."""
 import html
 import re
 from datetime import datetime
@@ -13,7 +13,7 @@ from helper_func import forward_info, get_readable_time, is_admin
 from state import STATE, in_state
 
 CLONE_HELP = (
-    "<b>🤖 Create your own clone</b>\n\n"
+    "<b>ðŸ¤– Create your own clone</b>\n\n"
     "1. Open @BotFather and create a bot with /newbot\n"
     "2. Copy the bot token\n"
     "3. Send it here (or forward BotFather's message)\n\n"
@@ -33,9 +33,9 @@ def can_manage(client, t, uid):
 
 def clones_view(client, uid):
     mine = [c for c in CLONES.values() if can_manage(client, c, uid)]
-    rows = [[B(f"🤖 @{c.username}", callback_data=f"mc:sel:{c.bot_id}")] for c in mine]
-    rows.append([B("➕ Add Clone", callback_data="mc:add")])
-    text = "🤖 <b>Your Clones</b>\n\n" + (
+    rows = [[B(f"ðŸ¤– @{c.username}", callback_data=f"mc:sel:{c.bot_id}")] for c in mine]
+    rows.append([B("âž• Add Clone", callback_data="mc:add")])
+    text = "ðŸ¤– <b>Your Clones</b>\n\n" + (
         "Select a clone to customize it." if mine else "You don't have any clones yet."
     )
     return text, M(rows)
@@ -44,18 +44,15 @@ def clones_view(client, uid):
 # ---------------- panel ----------------
 
 def _onoff(v):
-    return "ON ✅" if v else "OFF ❌"
+    return "ON âœ…" if v else "OFF âŒ"
 
 
 def menu_text(t):
     text = (
-        "🪄 <u><b>Customize Clone</b></u>\n\n"
-        f"➛ <b>Name:</b> {html.escape(t.display_name or '')}\n\n"
+        "ðŸª„ <u><b>Customize Clone</b></u>\n\n"
+        f"âž› <b>Name:</b> {html.escape(t.display_name or '')}\n\n"
         "<i>Configure Your Clone Settings Using Given Buttons</i>"
     )
-    if not t.db_channel:
-        text += ("\n\n⚠️ <b>This clone can't access the main DB channel yet.</b> "
-                 "Add it as admin there, then tap RESTART.")
     return text
 
 
@@ -74,35 +71,35 @@ def menu_markup(t):
 
 async def render(t, name):
     cfg = t.cfg
-    back = [B("⬅️ Back", callback_data=cd(t, "menu"))]
+    back = [B("â¬…ï¸ Back", callback_data=cd(t, "menu"))]
 
     if name == "start":
-        pic = "set ✅" if cfg["start_pic"] else "not set"
+        pic = "set âœ…" if cfg["start_pic"] else "not set"
         return (
-            f"📝 <b>Start Message</b>\n\n{cfg['start_msg']}\n\n🖼 Picture: {pic}",
-            M([[B("✏️ Set Message", callback_data=cd(t, "startmsg")),
-                B("🖼 Set Picture", callback_data=cd(t, "startpic"))],
-               [B("♻️ Reset", callback_data=cd(t, "startreset"))], back]),
+            f"ðŸ“ <b>Start Message</b>\n\n{cfg['start_msg']}\n\nðŸ–¼ Picture: {pic}",
+            M([[B("âœï¸ Set Message", callback_data=cd(t, "startmsg")),
+                B("ðŸ–¼ Set Picture", callback_data=cd(t, "startpic"))],
+               [B("â™»ï¸ Reset", callback_data=cd(t, "startreset"))], back]),
         )
 
     if name == "force":
-        rows = [[B(f"❌ {t.fsub_titles.get(ch, ch)}", callback_data=cd(t, "fdel", ch))]
+        rows = [[B(f"âŒ {t.fsub_titles.get(ch, ch)}", callback_data=cd(t, "fdel", ch))]
                 for ch in cfg["force"]]
         if len(cfg["force"]) < 4:
-            rows.append([B("➕ Add Channel", callback_data=cd(t, "fadd"))])
+            rows.append([B("âž• Add Channel", callback_data=cd(t, "fadd"))])
         rows.append(back)
         return (
-            f"📢 <b>Force Sub</b> ({len(cfg['force'])}/4)\n\n"
+            f"ðŸ“¢ <b>Force Sub</b> ({len(cfg['force'])}/4)\n\n"
             "Users must join these channels before getting files.\nTap a channel to remove it.",
             M(rows),
         )
 
     if name == "mods":
-        rows = [[B(f"❌ {m}", callback_data=cd(t, "mdel", m))] for m in cfg["mods"]]
-        rows.append([B("➕ Add Moderator", callback_data=cd(t, "madd"))])
+        rows = [[B(f"âŒ {m}", callback_data=cd(t, "mdel", m))] for m in cfg["mods"]]
+        rows.append([B("âž• Add Moderator", callback_data=cd(t, "madd"))])
         rows.append(back)
         return (
-            "👮 <b>Moderators</b>\n\nModerators can store files in the clone and use its admin commands.\n"
+            "ðŸ‘® <b>Moderators</b>\n\nModerators can store files in the clone and use its admin commands.\n"
             "Tap an ID to remove it.",
             M(rows),
         )
@@ -110,34 +107,34 @@ async def render(t, name):
     if name == "ad":
         cur = int(cfg["auto_delete"])
         return (
-            f"🗑 <b>Auto Delete</b>\n\nCurrent: <b>{get_readable_time(cur) if cur else 'OFF'}</b>\n\n"
+            f"ðŸ—‘ <b>Auto Delete</b>\n\nCurrent: <b>{get_readable_time(cur) if cur else 'OFF'}</b>\n\n"
             "Delivered files are deleted from the user's chat after this time.",
             M([[B("OFF", callback_data=cd(t, "adset", 0)), B("5 min", callback_data=cd(t, "adset", 300)),
                 B("10 min", callback_data=cd(t, "adset", 600))],
                [B("30 min", callback_data=cd(t, "adset", 1800)), B("1 hour", callback_data=cd(t, "adset", 3600)),
-                B("✏️ Custom", callback_data=cd(t, "adcustom"))], back]),
+                B("âœï¸ Custom", callback_data=cd(t, "adcustom"))], back]),
         )
 
     if name == "nf":
         on = cfg["no_forward"]
         return (
-            f"🚫 <b>No Forward</b>\n\nStatus: <b>{_onoff(on)}</b>\n\nWhen ON, files can't be forwarded or saved.",
+            f"ðŸš« <b>No Forward</b>\n\nStatus: <b>{_onoff(on)}</b>\n\nWhen ON, files can't be forwarded or saved.",
             M([[B("Turn OFF" if on else "Turn ON", callback_data=cd(t, "nftoggle"))], back]),
         )
 
     if name == "tok":
         api = cfg["short_api"]
-        masked = ("•••" + api[-4:]) if api else "not set"
+        masked = ("â€¢â€¢â€¢" + api[-4:]) if api else "not set"
         on = cfg["token_on"]
         return (
-            "🔑 <b>Access Token</b>\n\n"
+            "ðŸ”‘ <b>Access Token</b>\n\n"
             f"Status: <b>{_onoff(on)}</b>\n"
             f"Shortener: <code>{html.escape(cfg['short_site'] or 'not set')}</code>\n"
             f"API: <code>{masked}</code>\n"
             f"Validity: <b>{cfg['token_hours']}h</b>\n\n"
             "Users verify through your shortener link to unlock files for the validity period.",
             M([[B("Turn OFF" if on else "Turn ON", callback_data=cd(t, "toktoggle"))],
-               [B("🌐 Set Site", callback_data=cd(t, "toksite")), B("🔑 Set API", callback_data=cd(t, "tokapi"))],
+               [B("ðŸŒ Set Site", callback_data=cd(t, "toksite")), B("ðŸ”‘ Set API", callback_data=cd(t, "tokapi"))],
                [B("6h", callback_data=cd(t, "tokh", 6)), B("12h", callback_data=cd(t, "tokh", 12)),
                 B("24h", callback_data=cd(t, "tokh", 24)), B("48h", callback_data=cd(t, "tokh", 48))], back]),
         )
@@ -145,9 +142,9 @@ async def render(t, name):
     if name == "mode":
         m = cfg["mode"]
         return (
-            f"🔁 <b>Mode</b>\n\nCurrent: <b>{m.upper()}</b>\n\n"
-            "• PUBLIC – anyone with a link can get files\n"
-            "• PRIVATE – only the owner and moderators can get files",
+            f"ðŸ” <b>Mode</b>\n\nCurrent: <b>{m.upper()}</b>\n\n"
+            "â€¢ PUBLIC â€“ anyone with a link can get files\n"
+            "â€¢ PRIVATE â€“ only the owner and moderators can get files",
             M([[B("Switch to PRIVATE" if m == "public" else "Switch to PUBLIC",
                   callback_data=cd(t, "modetoggle"))], back]),
         )
@@ -157,25 +154,25 @@ async def render(t, name):
         up = get_readable_time((datetime.now() - t.uptime).total_seconds())
         ad = int(cfg["auto_delete"])
         return (
-            "📊 <b>Stats</b>\n\n"
-            f"🤖 Bot: @{t.username}\n"
-            f"👥 Users: <b>{users}</b>\n"
-            f"⏱ Uptime: <b>{up}</b>\n"
-            f"⚡ Status: <b>{'Active' if cfg['active'] else 'Deactivated'}</b>\n"
-            f"🗄 Main DB access: <b>{'✅' if t.db_channel else '❌'}</b>\n"
-            f"🔁 Mode: <b>{cfg['mode'].upper()}</b>\n"
-            f"📢 Force sub: <b>{len(t.force_channels)}</b>\n"
-            f"👮 Moderators: <b>{len(cfg['mods'])}</b>\n"
-            f"🗑 Auto delete: <b>{get_readable_time(ad) if ad else 'OFF'}</b>\n"
-            f"🚫 No forward: <b>{_onoff(cfg['no_forward'])}</b>\n"
-            f"🔑 Access token: <b>{_onoff(cfg['token_on'])}</b>",
+            "ðŸ“Š <b>Stats</b>\n\n"
+            f"ðŸ¤– Bot: @{t.username}\n"
+            f"ðŸ‘¥ Users: <b>{users}</b>\n"
+            f"â± Uptime: <b>{up}</b>\n"
+            f"âš¡ Status: <b>{'Active' if cfg['active'] else 'Deactivated'}</b>\n"
+            "ðŸ—„ Storage: <b>Main DB channel</b>\n"
+            f"ðŸ” Mode: <b>{cfg['mode'].upper()}</b>\n"
+            f"ðŸ“¢ Force sub: <b>{len(t.force_channels)}</b>\n"
+            f"ðŸ‘® Moderators: <b>{len(cfg['mods'])}</b>\n"
+            f"ðŸ—‘ Auto delete: <b>{get_readable_time(ad) if ad else 'OFF'}</b>\n"
+            f"ðŸš« No forward: <b>{_onoff(cfg['no_forward'])}</b>\n"
+            f"ðŸ”‘ Access token: <b>{_onoff(cfg['token_on'])}</b>",
             M([back]),
         )
 
     if name == "del":
         return (
-            "⚠️ <b>Delete this clone?</b>\n\nThis removes the clone and all its data permanently.",
-            M([[B("✅ Yes, delete", callback_data=cd(t, "delyes")), B("❌ No", callback_data=cd(t, "menu"))]]),
+            "âš ï¸ <b>Delete this clone?</b>\n\nThis removes the clone and all its data permanently.",
+            M([[B("âœ… Yes, delete", callback_data=cd(t, "delyes")), B("âŒ No", callback_data=cd(t, "menu"))]]),
         )
 
     return menu_text(t), menu_markup(t)
@@ -202,9 +199,9 @@ PROMPTS = {
     "startmsg": ("cs_startmsg",
                  "Send the new <b>start message</b> (HTML allowed).\n"
                  "Fillings: <code>{first} {last} {username} {mention} {id}</code>", "start"),
-    "startpic": ("cs_startpic", "Send a direct <b>image URL</b> (https://…) to use as the start picture.", "start"),
+    "startpic": ("cs_startpic", "Send a direct <b>image URL</b> (https://â€¦) to use as the start picture.", "start"),
     "fadd": ("cs_fadd",
-             "Send the <b>channel ID</b> (like <code>-100…</code>) or forward any message from the channel.\n"
+             "Send the <b>channel ID</b> (like <code>-100â€¦</code>) or forward any message from the channel.\n"
              "The main bot must be admin there so it can add the clone.", "force"),
     "madd": ("cs_madd", "Send the <b>user ID</b> or forward a message from that user.", "mods"),
     "adcustom": ("cs_adcustom", "Send the auto delete time in <b>seconds</b> (0 = off).", "ad"),
@@ -239,7 +236,7 @@ async def callbacks(client, q):
             if CLONE_ADMIN_ONLY and not is_admin(client, uid):
                 return await q.answer("Only admins can create clones.", show_alert=True)
             STATE[key] = {"mode": "cl_token"}
-            await _show(q, CLONE_HELP, M([[B("⬅️ Back", callback_data="mc:menu")]]))
+            await _show(q, CLONE_HELP, M([[B("â¬…ï¸ Back", callback_data="mc:menu")]]))
         elif act == "sel":
             t = CLONES.get(parts[2])
             if not t or not can_manage(client, t, uid):
@@ -265,7 +262,7 @@ async def callbacks(client, q):
         mode, text, back_to = PROMPTS[act]
         STATE[key] = {"mode": mode, "bot": bot_id}
         await _show(q, text + "\n\n/cancel or tap Back to abort.",
-                    M([[B("⬅️ Back", callback_data=cd(t, back_to))]]))
+                    M([[B("â¬…ï¸ Back", callback_data=cd(t, back_to))]]))
 
     elif act == "startreset":
         cfg["start_msg"], cfg["start_pic"] = START_MESSAGE, ""
@@ -320,13 +317,13 @@ async def callbacks(client, q):
         await _show(q, menu_text(t), menu_markup(t))
 
     elif act == "restart":
-        await _show(q, "♻️ <b>Restarting clone...</b>", None)
+        await _show(q, "â™»ï¸ <b>Restarting clone...</b>", None)
         new = await restart_clone(bot_id, client)
         if new:
-            await _show(q, "✅ <b>Clone restarted.</b>\n\n" + menu_text(new), menu_markup(new))
+            await _show(q, "âœ… <b>Clone restarted.</b>\n\n" + menu_text(new), menu_markup(new))
         else:
-            await _show(q, "❌ <b>Restart failed.</b> Check the logs.",
-                        M([[B("⬅️ Back", callback_data="mc:menu")]]))
+            await _show(q, "âŒ <b>Restart failed.</b> Check the logs.",
+                        M([[B("â¬…ï¸ Back", callback_data="mc:menu")]]))
 
     elif act == "delyes":
         await stop_clone(bot_id)
@@ -334,7 +331,7 @@ async def callbacks(client, q):
         await db.del_settings(bot_id)
         await db.del_bot_users(bot_id)
         await db.del_bot_files(bot_id)
-        await _show(q, "🗑 <b>Clone deleted.</b>", M([[B("⬅️ Back", callback_data="mc:menu")]]))
+        await _show(q, "ðŸ—‘ <b>Clone deleted.</b>", M([[B("â¬…ï¸ Back", callback_data="mc:menu")]]))
 
     await q.answer()
 
@@ -377,7 +374,7 @@ async def cs_input(client, message):
     t = CLONES.get(st.get("bot"))
     if not t:
         STATE.pop(key, None)
-        return await message.reply_text("❌ Clone not found.")
+        return await message.reply_text("âŒ Clone not found.")
     cfg = t.cfg
     text = (message.text or "").strip()
 
@@ -385,39 +382,39 @@ async def cs_input(client, message):
         STATE.pop(key, None)
         await t.save_cfg()
         await message.reply_text(
-            msg, quote=True, reply_markup=M([[B("⬅️ Back", callback_data=cd(t, back))]]))
+            msg, quote=True, reply_markup=M([[B("â¬…ï¸ Back", callback_data=cd(t, back))]]))
 
     async def fail(msg):
         await message.reply_text(f"{msg}\n\nTry again or /cancel.", quote=True)
 
     if mode == "cs_startmsg":
         if not message.text:
-            return await fail("❌ Send text.")
+            return await fail("âŒ Send text.")
         cfg["start_msg"] = message.text.html
-        return await done("✅ Start message updated.", "start")
+        return await done("âœ… Start message updated.", "start")
 
     if mode == "cs_startpic":
         if not text.lower().startswith(("http://", "https://")):
-            return await fail("❌ Send a direct image URL starting with https://")
+            return await fail("âŒ Send a direct image URL starting with https://")
         cfg["start_pic"] = text
-        return await done("✅ Start picture updated.", "start")
+        return await done("âœ… Start picture updated.", "start")
 
     if mode == "cs_fadd":
         ch = _chan_id(message)
         if ch is None:
-            return await fail("❌ Send a channel ID or forward a message from the channel.")
+            return await fail("âŒ Send a channel ID or forward a message from the channel.")
         if ch in cfg["force"]:
-            return await fail("❌ That channel is already added.")
+            return await fail("âŒ That channel is already added.")
         if len(cfg["force"]) >= 4:
-            return await fail("❌ Maximum 4 force sub channels.")
+            return await fail("âŒ Maximum 4 force sub channels.")
         try:
             await _prep_force(client, t, ch)
         except Exception as e:
-            return await fail(f"❌ Can't use that channel: <code>{e}</code>\n"
+            return await fail(f"âŒ Can't use that channel: <code>{e}</code>\n"
                               "Make the main bot (with add-admin rights) or the clone admin there.")
         cfg["force"].append(ch)
         await t.setup_force()
-        return await done("✅ Force sub channel added.", "force")
+        return await done("âœ… Force sub channel added.", "force")
 
     if mode == "cs_madd":
         new = None
@@ -429,31 +426,30 @@ async def cs_input(client, message):
             if u:
                 new = u.id
         if not new:
-            return await fail("❌ Send a numeric user ID or forward a message from the user.")
+            return await fail("âŒ Send a numeric user ID or forward a message from the user.")
         if new not in cfg["mods"]:
             cfg["mods"].append(new)
-        return await done("✅ Moderator added.", "mods")
+        return await done("âœ… Moderator added.", "mods")
 
     if mode == "cs_adcustom":
         if not text.isdigit():
-            return await fail("❌ Send a number of seconds.")
+            return await fail("âŒ Send a number of seconds.")
         cfg["auto_delete"] = int(text)
-        return await done("✅ Auto delete updated.", "ad")
+        return await done("âœ… Auto delete updated.", "ad")
 
     if mode == "cs_toksite":
         site = text.replace("https://", "").replace("http://", "").strip("/")
         if not site or " " in site:
-            return await fail("❌ Send a valid site like <code>gplinks.in</code>.")
+            return await fail("âŒ Send a valid site like <code>gplinks.in</code>.")
         cfg["short_site"] = site
-        return await done("✅ Shortener site saved.", "tok")
+        return await done("âœ… Shortener site saved.", "tok")
 
     if mode == "cs_tokapi":
         if not text:
-            return await fail("❌ Send the API key as text.")
+            return await fail("âŒ Send the API key as text.")
         cfg["short_api"] = text
         try:
             await message.delete()  # hide the key
         except Exception:
             pass
-        return await done("✅ Shortener API saved.", "tok")
-        
+        return await done("âœ… Shortener API saved.", "tok")
