@@ -29,7 +29,7 @@ def default_cfg(is_clone: bool) -> dict:
         "short_site": "",
         "short_api": "",
         "token_hours": 24,
-        "db_channel": None if is_clone else CHANNEL_ID,
+        "db_channel": CHANNEL_ID,  # clones share the main DB channel by default
         "mode": "public",  # public / private
         "active": True,
     }
@@ -100,6 +100,8 @@ class Bot(Client):
         saved = await db.get_settings(self.bot_id)
         if self.is_clone:
             self.cfg.update(saved)
+            if not self.cfg.get("db_channel"):
+                self.cfg["db_channel"] = CHANNEL_ID
         else:
             self.cfg.update({k: v for k, v in saved.items() if k in MAIN_SAVED})
 
@@ -161,6 +163,7 @@ async def restart_clone(bot_id: str):
     await asyncio.sleep(1)
     try:
         new = await start_clone(token, owner)
-        await new.send_message(owner, "âœ… Clone restarted.")
+        await new.send_message(owner, "✅ Clone restarted.")
     except Exception as e:
         LOGGER.error(f"Restarting clone {bot_id} failed: {e}")
+        
