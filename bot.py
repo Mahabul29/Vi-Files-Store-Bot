@@ -13,6 +13,7 @@ from config import (
 from database.database import db
 
 CLONES = {}  # bot_id -> Bot instance
+MAIN = {}  # {'bot': main Bot instance}
 MAIN_SAVED = ("auto_delete",)  # settings the main bot persists in DB
 
 
@@ -114,7 +115,10 @@ class Bot(Client):
 
         await self.setup_force()
 
-        if not await self.setup_db_channel() and not self.is_clone:
+        if not self.is_clone:
+            MAIN['bot'] = self
+        # clones store files through the main bot, so only the main bot needs the channel
+        if not self.is_clone and not await self.setup_db_channel():
             await super().stop()
             raise RuntimeError("Bot must be admin in the DB channel (check CHANNEL_ID).")
 
@@ -155,7 +159,8 @@ async def stop_clone(bot_id: str):
 
 
 async def ensure_db_access(main, clone) -> bool:
-    """Make sure the clone can use the main DB channel (main bot promotes it if needed)."""
+    """Clones store files through the main bot and need no channel access."""
+    return True
     if clone.db_channel:
         return True
     try:
@@ -184,4 +189,3 @@ async def restart_clone(bot_id: str, main=None):
     if main is not None:
         await ensure_db_access(main, new)
     return new
-    
