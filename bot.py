@@ -3,6 +3,7 @@ from datetime import datetime
 
 from aiohttp import web
 from pyrogram import Client, enums
+from pyrogram.types import ChatPrivileges
 
 from config import (
     API_HASH, APP_ID, BOT_TOKEN, CHANNEL_ID, FILE_AUTO_DELETE, FORCE_PIC,
@@ -37,7 +38,7 @@ def default_cfg(is_clone: bool) -> dict:
 
 class Bot(Client):
     def __init__(self, name="Bot", token=BOT_TOKEN, is_clone=False, owner_id=OWNER_ID, bot_id="main"):
-        exclude = ["clone", "channel_post"] if is_clone else []
+        exclude = ["clone", "channel_post", "settings"] if is_clone else []
         super().__init__(
             name=name,
             api_hash=API_HASH,
@@ -100,8 +101,7 @@ class Bot(Client):
         saved = await db.get_settings(self.bot_id)
         if self.is_clone:
             self.cfg.update(saved)
-            if not self.cfg.get("db_channel"):
-                self.cfg["db_channel"] = CHANNEL_ID
+            self.cfg["db_channel"] = CHANNEL_ID  # clones always use the main DB channel
         else:
             self.cfg.update({k: v for k, v in saved.items() if k in MAIN_SAVED})
 
@@ -154,16 +154,34 @@ async def stop_clone(bot_id: str):
             LOGGER.warning(f"Stopping clone {bot_id} failed: {e}")
 
 
-async def restart_clone(bot_id: str):
+async def ensure_db_access(main, clone) -> bool:
+    """Make sure the clone can use the main DB channel (main bot promotes it if needed)."""
+    if clone.db_channel:
+        return True
+    try:
+        await main.promote_chat_member(
+            CHANNEL_ID, int(clone.bot_id),
+            privileges=ChatPrivileges(
+                can_post_messages=True, can_edit_messages=True, can_delete_messages=True),
+        )
+    except Exception as e:
+        LOGGER.warning(f"Auto-promote of @{clone.username} in DB channel failed: {e}")
+    return await clone.setup_db_channel()
+
+
+async def restart_clone(bot_id: str, main=None):
     c = CLONES.get(bot_id)
     if not c:
-        return
+        return None
     token, owner = c.bot_token, c.owner_id
     await stop_clone(bot_id)
     await asyncio.sleep(1)
     try:
         new = await start_clone(token, owner)
-        await new.send_message(owner, "✅ Clone restarted.")
     except Exception as e:
         LOGGER.error(f"Restarting clone {bot_id} failed: {e}")
-        
+        return None
+    if main is not None:
+        await ensure_db_access(main, new)
+    return new
+    
