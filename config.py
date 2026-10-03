@@ -62,4 +62,9 @@ FORCE_SUB_MESSAGE = os.environ.get(
     "<b>Hello {first}!\n\nYou must join my channel(s) to use me. "
     "Join below, then tap <u>Try Again</u>.</b>",
 )
-USER_REPLY_TEXT = os.environ.get("USER_REPLY_TEXT", "❌ Don't send me messages directly, I'm only a file store bot.")
+USER_REPLY_TEXT = os.environ.get(
+    "USER_REPLY_TEXT", "âŒ Don't send me messages directly, I'm only a file store bot."
+)
+
+# True = only ADMINS can create clones with /clone
+CLONE_ADMIN_ONLY = os.environ.get("CLONE_ADMIN_ONLY", "False").lower() == "true"
