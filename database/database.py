@@ -57,10 +57,17 @@ class Database:
         await self.clones.delete_one({"_id": bot_id})
 
     # ---- files stored through clones (shared main DB channel) ----
-    async def add_file(self, bot: str, msg_id: int):
+    async def add_file(self, bot: str, msg_id: int, file_id: str = "", caption: str = ""):
         await self.files.update_one(
-            {"_id": f"{bot}:{msg_id}"}, {"$set": {"bot": bot, "msg": msg_id}}, upsert=True
+            {"_id": f"{bot}:{msg_id}"},
+            {"$set": {"bot": bot, "msg": msg_id, "file_id": file_id, "caption": caption}},
+            upsert=True,
         )
+
+    async def get_files(self, bot: str, ids):
+        ids = list(ids)
+        docs = {d["msg"]: d async for d in self.files.find({"bot": bot, "msg": {"$in": ids}})}
+        return [docs[i] for i in ids if i in docs]
 
     async def owned_ids(self, bot: str, ids):
         ids = list(ids)
