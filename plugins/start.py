@@ -1,4 +1,4 @@
-Import asyncio
+import asyncio
 import secrets
 import time
 from datetime import datetime
@@ -280,4 +280,3 @@ async def broadcast(client, message):
         f"<b>Broadcast done</b>\n\nTotal: {len(users)}\nSuccess: {ok}\n"
         f"Blocked: {blocked}\nDeleted accounts: {deleted}\nFailed: {failed}"
     )
-
