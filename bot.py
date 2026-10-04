@@ -14,6 +14,8 @@ from database.database import db
 
 CLONES = {}  # bot_id -> Bot instance
 MAIN = {}  # {'bot': main Bot instance}
+OLD_START = ("<b>Hello {first}!\n\nI store posts and files in a private channel and "
+             "share them through special links.</b>")
 MAIN_SAVED = ("auto_delete",)  # settings the main bot persists in DB
 
 
@@ -103,6 +105,8 @@ class Bot(Client):
         if self.is_clone:
             self.cfg.update(saved)
             self.cfg["db_channel"] = CHANNEL_ID  # clones always use the main DB channel
+            if self.cfg["start_msg"] == OLD_START:
+                self.cfg["start_msg"] = START_MESSAGE
         else:
             self.cfg.update({k: v for k, v in saved.items() if k in MAIN_SAVED})
 
@@ -189,3 +193,4 @@ async def restart_clone(bot_id: str, main=None):
     if main is not None:
         await ensure_db_access(main, new)
     return new
+        
