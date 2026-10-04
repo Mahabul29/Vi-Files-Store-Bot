@@ -8,10 +8,22 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import ADMINS
 
-START_BUTTONS = InlineKeyboardMarkup(
-    [[InlineKeyboardButton("ðŸ˜Š About Me", callback_data="about"),
-      InlineKeyboardButton("ðŸ”’ Close", callback_data="close")]]
-)
+def start_buttons(client):
+    """HELP / ABOUT / CREATE MY OWN CLONE / CLOSE."""
+    from bot import MAIN  # lazy: avoid circular import
+
+    main = MAIN.get("bot")
+    if client.is_clone and main and main.username:
+        clone_btn = InlineKeyboardButton(
+            "CREATE MY OWN CLONE", url=f"https://t.me/{main.username}?start=clone")
+    else:
+        clone_btn = InlineKeyboardButton("CREATE MY OWN CLONE", callback_data="clone")
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("HELP", callback_data="help"),
+         InlineKeyboardButton("ABOUT", callback_data="about")],
+        [clone_btn],
+        [InlineKeyboardButton("CLOSE", callback_data="close")],
+    ])
 
 _OK = {
     enums.ChatMemberStatus.OWNER,
@@ -139,3 +151,4 @@ def get_readable_time(seconds) -> str:
     m, s = divmod(r, 60)
     parts = [f"{v}{u}" for v, u in ((d, "d"), (h, "h"), (m, "m"), (s, "s")) if v]
     return " ".join(parts) or "0s"
+    
