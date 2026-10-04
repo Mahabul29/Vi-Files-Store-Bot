@@ -38,8 +38,8 @@ async def _auto_delete(sent, notice, link, delay):
         except Exception:
             pass
     try:
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton("\u267b\ufe0f Get Files Again", url=link)]]) if link else None
-        await notice.edit_text("<b>\U0001f5d1 Your files were deleted. Tap below to get them again.</b>", reply_markup=markup)
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton("\u267b\ufe0f 𝙶𝚎𝚝𝚜 𝙵𝚒𝚕𝚎𝚜 𝙰𝚐𝚊𝚒𝚗", url=link)]]) if link else None
+        await notice.edit_text("<b>\U0001f5d1 𝚈𝚘𝚞𝚛 𝚏𝚒𝚕𝚎𝚜 𝚠𝚎𝚛𝚎 deleted. 𝚃𝚊𝚙 𝚋𝚎𝚕𝚘𝚠 𝚝𝚘 𝚐𝚎𝚝 𝚝𝚑𝚎𝚖 𝚊𝚐𝚊𝚒𝚗.</b>", reply_markup=markup)
     except Exception:
         pass
 
@@ -87,7 +87,7 @@ async def handle_verify(client, message, token):
     rows = []
     if doc.get("payload"):
         rows.append([InlineKeyboardButton(
-            "\U0001f4c2 Get Files", url=f"https://t.me/{client.username}?start={doc['payload']}")])
+            "\U0001f4c2 𝙶𝚎𝚝 𝙵𝚒𝚕𝚎𝚜", url=f"https://t.me/{client.username}?start={doc['payload']}")])
     await message.reply_text(
         f"<b>\u2705 Verified! Access unlocked for {hours} hour(s).</b>",
         quote=True,
@@ -113,11 +113,11 @@ async def deliver(client, message, payload):
     except Exception:
         return await message.reply_text("\u274c Invalid or broken link.", quote=True)
 
-    temp = await message.reply_text("\u23f3 Please wait...", quote=True)
+    temp = await message.reply_text("\u23f3 𝙿𝚕𝚎𝚊𝚜𝚎 𝚠𝚊𝚒𝚝...", quote=True)
     # Clones deliver with their own file_ids (files are archived in the main DB channel)
     items = await db.get_files(client.bot_id, ids) if client.is_clone else await get_messages(client, ids)
     if not items:
-        return await temp.edit_text("\u274c Files not found or deleted.")
+        return await temp.edit_text("\u274c 𝙵𝚒𝚕𝚎𝚜 𝚗𝚘𝚝 𝚏𝚘𝚞𝚗𝚍 𝚘𝚛 𝚍𝚎𝚕𝚎𝚝𝚎𝚍.")
     await temp.delete()
 
     protect = cfg["no_forward"]
@@ -147,8 +147,8 @@ async def deliver(client, message, payload):
     if delay > 0 and sent:
         link = f"https://t.me/{client.username}?start={payload}"
         notice = await message.reply_text(
-            f"<b>\u26a0\ufe0f These files will be deleted in {get_readable_time(delay)}. "
-            "Forward them somewhere safe now.</b>"
+            f"<b>\u26a0\ufe0f 𝚃𝚑𝚎𝚜𝚎 𝚏𝚒𝚕𝚎𝚜 𝚠𝚒𝚕𝚕 𝚋𝚎 𝚍𝚎𝚕𝚎𝚝𝚎𝚍 𝚒𝚗 {get_readable_time(delay)}. "
+            "𝙵𝚘𝚛𝚠𝚊𝚛𝚍 𝚝𝚑𝚎𝚖 𝚜𝚘𝚖𝚎𝚠𝚑𝚎𝚛𝚎 𝚜𝚊𝚏𝚎 𝚗𝚘𝚠.</b>"
         )
         asyncio.create_task(_auto_delete(sent, notice, link, delay))
 
@@ -171,7 +171,7 @@ async def start_command(client, message):
         return await message.reply_text(CLONE_HELP, quote=True)
 
     if not cfg["active"] and not admin:
-        return await message.reply_text("\U0001f6ab This bot is currently deactivated by its owner.", quote=True)
+        return await message.reply_text("\U0001f6ab 𝚃𝚑𝚒𝚜 𝚋𝚘𝚝 is currently deactivated by its owner.", quote=True)
     if cfg["mode"] == "private" and not admin:
         return await message.reply_text("\U0001f512 This bot is private.", quote=True)
 
