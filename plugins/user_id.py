@@ -9,4 +9,4 @@ async def show_id(client, message):
 
 @Bot.on_message(filters.command("ping") & filters.private)
 async def ping(client, message):
-    await message.reply_text("ðŸ“ Pong!", quote=True)
+    await message.reply_text("\U0001f3d3 Pong!", quote=True)
