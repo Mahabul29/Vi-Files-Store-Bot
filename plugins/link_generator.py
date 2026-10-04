@@ -113,7 +113,7 @@ async def store(client, message):
 @Bot.on_message(filters.private & admins & filters.command("genlink"))
 async def genlink(client, message):
     if client.is_clone:
-        return await message.reply_text(""𝙹𝚞𝚜𝚝 𝚜𝚎𝚗𝚍 𝚊 𝚏𝚒𝚕𝚎 𝚝𝚘 𝚝𝚑𝚒𝚜 𝚋𝚘𝚝 𝚊𝚗𝚍 𝚢𝚘𝚞'𝚕𝚕 𝚐𝚎𝚝 𝚒𝚝𝚜 𝚕𝚒𝚗𝚔.")
+        return await message.reply_text("𝙹𝚞𝚜𝚝 𝚜𝚎𝚗𝚍 𝚊 𝚏𝚒𝚕𝚎 𝚝𝚘 𝚝𝚑𝚒𝚜 𝚋𝚘𝚝 𝚊𝚗𝚍 𝚢𝚘𝚞'𝚕𝚕 𝚐𝚎𝚝 𝚒𝚝𝚜 𝚕𝚒𝚗𝚔.")
     if not _ready(client):
         return await message.reply_text(NOT_READY)
     STATE[_key(client, message)] = {"mode": "lg_single"}
@@ -166,7 +166,7 @@ async def collect(client, message):
     if st["mode"] == "lg_collect":
         if message.media:
             return  # handled by store()
-        return await message.reply_text("𝚂𝚎𝚗𝚍 𝚏𝚒𝚕𝚎𝚜 (𝚗𝚘𝚝 𝚝𝚎𝚝), 𝚘𝚛 /done 𝚝𝚘 𝚏𝚒𝚗𝚒𝚜𝚑.", quote=True)
+        return await message.reply_text("𝚂𝚎𝚗𝚍 𝚏𝚒𝚕𝚎𝚜 (𝚗𝚘𝚝 𝚝𝚎𝚡𝚝), 𝚘𝚛 /done 𝚝𝚘 𝚏𝚒𝚗𝚒𝚜𝚑.", quote=True)
 
     msg_id = await get_message_id(client, message)
     if not msg_id:
