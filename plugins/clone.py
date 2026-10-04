@@ -20,11 +20,11 @@ async def clone_token(client, message):
     key = (client.bot_id, uid)
     if CLONE_ADMIN_ONLY and not is_admin(client, uid):
         STATE.pop(key, None)
-        return await message.reply_text("❌ Only admins can create clones.", quote=True)
+        return await message.reply_text("\u274c Only admins can create clones.", quote=True)
 
     m = TOKEN_RE.search(message.text or "")
     if not m:
-        return await message.reply_text("❌ No bot token found. Send it again or /cancel.", quote=True)
+        return await message.reply_text("\u274c No bot token found. Send it again or /cancel.", quote=True)
     STATE.pop(key, None)
     token = m.group(0)
     try:
@@ -32,11 +32,11 @@ async def clone_token(client, message):
     except Exception:
         pass
 
-    wait = await message.reply_text("⏳ Creating your clone...")
+    wait = await message.reply_text("\u23f3 Creating your clone...")
     try:
         clone = await start_clone(token, uid)
     except Exception as e:
-        return await wait.edit_text(f"❌ Clone failed: <code>{e}</code>")
+        return await wait.edit_text(f"\u274c Clone failed: <code>{e}</code>")
 
     await db.add_clone(clone.bot_id, token, uid)
     await clone.save_cfg()
@@ -46,12 +46,12 @@ async def clone_token(client, message):
         try:
             await client.send_message(
                 OWNER_ID,
-                f"⚠️ Add @{clone.username} as admin (post rights) to the main DB channel.")
+                f"\u26a0\ufe0f Add @{clone.username} as admin (post rights) to the main DB channel.")
         except Exception:
             pass
 
     await wait.edit_text(
-        f"✅ <b>Clone created:</b> @{clone.username}\n\n{menu_text(clone)}",
+        f"\u2705 <b>Clone created:</b> @{clone.username}\n\n{menu_text(clone)}",
         reply_markup=menu_markup(clone),
     )
 
@@ -61,7 +61,7 @@ async def clones_list(client, message):
     if not CLONES:
         return await message.reply_text("No clones running.")
     text = "<b>Running clones:</b>\n\n" + "\n".join(
-        f"• @{c.username} — <code>{bid}</code> (owner <code>{c.owner_id}</code>)"
+        f"\u2022 @{c.username} \u2014 <code>{bid}</code> (owner <code>{c.owner_id}</code>)"
         for bid, c in CLONES.items()
     )
     await message.reply_text(text + "\n\nRemove with <code>/delclone BOT_ID</code>")
@@ -78,5 +78,4 @@ async def delclone_cmd(client, message):
     await db.del_settings(bot_id)
     await db.del_bot_users(bot_id)
     await db.del_bot_files(bot_id)
-    await message.reply_text("✅ Clone removed." if existed else "Removed from DB (it wasn't running).")
-    
+    await message.reply_text("\u2705 Clone removed." if existed else "Removed from DB (it wasn't running).")
