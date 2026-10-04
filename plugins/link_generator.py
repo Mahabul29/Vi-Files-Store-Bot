@@ -33,7 +33,7 @@ can_store = filters.create(_can_store)
 async def _send_link(client, message, string):
     link = f"https://t.me/{client.username}?start={await encode(string)}"
     markup = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("🔁 Share URL", url=f"https://telegram.me/share/url?url={link}")]]
+        [[InlineKeyboardButton("\U0001f501 Share URL", url=f"https://telegram.me/share/url?url={link}")]]
     )
     await message.reply_text(
         f"<b>Here is your link:</b>\n\n{link}",
@@ -47,7 +47,7 @@ def _ready(client):
     return bool(client.cfg["db_channel"] and client.db_channel)
 
 
-NOT_READY = ("⚠️ DB channel isn't available. Make sure this bot is admin (post rights) "
+NOT_READY = ("\u26a0\ufe0f DB channel isn't available. Make sure this bot is admin (post rights) "
              "in the DB channel.")
 
 
@@ -98,13 +98,13 @@ async def store(client, message):
         try:
             copied = await message.copy(ch)
         except Exception as e:
-            return await message.reply_text(f"❌ Couldn't store: <code>{e}</code>", quote=True)
+            return await message.reply_text(f"\u274c Couldn't store: <code>{e}</code>", quote=True)
         new_id = copied.id
 
     st = STATE.get(_key(client, message))
     if st:  # batch collect mode
         st["ids"].append(new_id)
-        return await message.reply_text(f"✅ Added ({len(st['ids'])}). Send more or /done.", quote=True)
+        return await message.reply_text(f"\u2705 Added ({len(st['ids'])}). Send more or /done.", quote=True)
     await _send_link(client, message, f"get-{new_id * abs(ch)}")
 
 
@@ -146,7 +146,7 @@ async def done(client, message):
     STATE.pop(key, None)
     ids = st["ids"]
     if not ids:
-        return await message.reply_text("❌ You didn't send any files.")
+        return await message.reply_text("\u274c You didn't send any files.")
     abs_ch = abs(client.cfg["db_channel"])
     if len(ids) == 1:
         return await _send_link(client, message, f"get-{ids[0] * abs_ch}")
@@ -171,7 +171,7 @@ async def collect(client, message):
     msg_id = await get_message_id(client, message)
     if not msg_id:
         return await message.reply_text(
-            "❌ That isn't from the DB channel. Forward again or /cancel.", quote=True
+            "\u274c That isn't from the DB channel. Forward again or /cancel.", quote=True
         )
     abs_ch = abs(client.cfg["db_channel"])
     if st["mode"] == "lg_single":
