@@ -1,6 +1,7 @@
 import time
 
 import motor.motor_asyncio
+from pymongo import ReturnDocument
 from config import DB_URL, DB_NAME
 
 
@@ -14,6 +15,7 @@ class Database:
         self.tokens = self.db["access_tokens"]
         self.verified = self.db["verified_users"]
         self.files = self.db["clone_files"]
+        self.counters = self.db["counters"]
 
     # ---- users (scoped per bot) ----
     async def add_user(self, bot: str, uid: int):
@@ -64,6 +66,17 @@ class Database:
             upsert=True,
         )
 
+    async def next_file_id(self, bot: str) -> int:
+        doc = await self.counters.find_one_and_update(
+            {"_id": bot}, {"$inc": {"n": 1}}, upsert=True, return_document=ReturnDocument.AFTER
+        )
+        return doc["n"]
+
+    async def set_archive(self, bot: str, file_no: int, archive_msg_id: int):
+        await self.files.update_one(
+            {"_id": f"{bot}:{file_no}"}, {"$set": {"archive": archive_msg_id}}
+        )
+
     async def get_files(self, bot: str, ids):
         ids = list(ids)
         docs = {d["msg"]: d async for d in self.files.find({"bot": bot, "msg": {"$in": ids}})}
@@ -97,3 +110,4 @@ class Database:
 
 
 db = Database(DB_URL, DB_NAME)
+        
