@@ -1,246 +1,520 @@
+"""Clone management panel \u2014 controlled entirely from the MAIN bot."""
+import html
+import re
+from datetime import datetime
+
 from pyrogram import filters
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from pyrogram.types import ChatPrivileges, InlineKeyboardButton as B, InlineKeyboardMarkup as M
 
-import asyncio
-import os
-
-from bot import Bot, MAIN
-from config import CHANNEL_ID, LOGGER
+from bot import Bot, CLONES, restart_clone, stop_clone
+from config import CHANNEL_ID, CLONE_ADMIN_ONLY, START_MESSAGE
 from database.database import db
-from pyrogram.errors import FloodWait
-
-from helper_func import admins, batch_channel, encode, get_message_id
+from helper_func import forward_info, get_readable_time, is_admin
 from state import STATE, in_state
 
-MEDIA = (
-    filters.document | filters.video | filters.audio | filters.photo
-    | filters.voice | filters.animation | filters.video_note | filters.sticker
+CLONE_HELP = (
+    "<b>\U0001f916 Create your own clone</b>\n\n"
+    "1. Open @BotFather and create a bot with /newbot\n"
+    "2. Copy the bot token\n"
+    "3. Send it here (or forward BotFather's message)\n\n"
+    "/cancel to abort."
 )
 
 
-def _key(client, message):
-    return (client.bot_id, message.from_user.id)
+def cd(t, act, arg=None):
+    return f"cs:{t.bot_id}:{act}" + (f":{arg}" if arg is not None else "")
 
 
-async def _can_store(_, client, m):
-    if not m.from_user:
-        return False
-    st = STATE.get((client.bot_id, m.from_user.id))
-    return st is None or st["mode"] == "lg_collect"
+def can_manage(client, t, uid):
+    return uid == t.owner_id or is_admin(client, uid)
 
 
-can_store = filters.create(_can_store)
+# ---------------- clone list ----------------
 
-
-async def _send_link(client, message, string):
-    link = f"https://t.me/{client.username}?start={await encode(string)}"
-    markup = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("\U0001f501 𝚂𝚑𝚊𝚛𝚎 𝚄𝚁𝙻", url=f"https://telegram.me/share/url?url={link}")]]
+def clones_view(client, uid):
+    mine = [c for c in CLONES.values() if can_manage(client, c, uid)]
+    rows = [[B(f"\U0001f916 @{c.username}", callback_data=f"mc:sel:{c.bot_id}")] for c in mine]
+    rows.append([B("\u2795 Add Clone", callback_data="mc:add")])
+    text = "\U0001f916 <b>Your Clones</b>\n\n" + (
+        "Select a clone to customize it." if mine else "You don't have any clones yet."
     )
-    await message.reply_text(
-        f"<b>𝙷𝚎𝚛𝚎 𝚒𝚜 𝚢𝚘𝚞𝚛 𝚕𝚒𝚗𝚔:</b>\n\n{link}",
-        quote=True, disable_web_page_preview=True, reply_markup=markup,
+    return text, M(rows)
+
+
+# ---------------- panel ----------------
+
+def _onoff(v):
+    return "ON \u2705" if v else "OFF \u274c"
+
+
+def menu_text(t):
+    text = (
+        "\U0001fa84 <u><b>Customize Clone</b></u>\n\n"
+        f"\u279b <b>Name:</b> {html.escape(t.display_name or '')}\n\n"
+        "<i>Configure Your Clone Settings Using Given Buttons</i>"
     )
+    return text
 
 
-def _ready(client):
-    if client.is_clone:  # clones store through the main bot
-        return True
-    return bool(client.cfg["db_channel"] and client.db_channel)
+def menu_markup(t):
+    return M([
+        [B("START MSG", callback_data=cd(t, "start")), B("FORCE SUB", callback_data=cd(t, "force"))],
+        [B("MODERATORS", callback_data=cd(t, "mods")), B("AUTO DELETE", callback_data=cd(t, "ad"))],
+        [B("NO FORWARD", callback_data=cd(t, "nf")), B("ACCESS TOKEN", callback_data=cd(t, "tok"))],
+        [B("DEACTIVATE" if t.cfg["active"] else "ACTIVATE", callback_data=cd(t, "deact")),
+         B("MODE", callback_data=cd(t, "mode"))],
+        [B("DB CHANNEL", callback_data=cd(t, "dbch"))],
+        [B("RESTART", callback_data=cd(t, "restart")), B("STATS", callback_data=cd(t, "stats"))],
+        [B("DELETE", callback_data=cd(t, "del"))],
+        [B("BACK", callback_data="mc:menu")],
+    ])
 
 
-NOT_READY = ("\u26a0\ufe0f 𝙳𝙱 𝚌𝚑𝚊𝚗𝚗𝚎𝚕 𝚒𝚜𝚗'𝚝 𝚊𝚟𝚊𝚒𝚕𝚊𝚋𝚕𝚎. 𝙼𝚊𝚔𝚎 𝚜𝚞𝚛𝚎 𝚝𝚑𝚒𝚜 𝚋𝚘𝚝 𝚒𝚜 𝚊𝚍𝚖𝚒𝚗 (𝚙𝚘𝚜𝚝 𝚛𝚒𝚐𝚑𝚝𝚜) "
-             "𝚒𝚗 𝚝𝚑𝚎 𝙳𝙱 𝚌𝚑𝚊𝚗𝚗𝚎𝚕.")
+async def render(t, name):
+    cfg = t.cfg
+    back = [B("\u2b05\ufe0f Back", callback_data=cd(t, "menu"))]
 
-
-# ---------- store files sent by admins/owner into the DB channel ----------
-
-ARCHIVE_SEM = asyncio.Semaphore(2)
-MAX_ARCHIVE = 2000 * 1024 * 1024  # Telegram bots can't download files above ~2GB
-
-
-async def _archive(client, message, file_no, caption, media):
-    """Background: copy a clone's file into the main DB channel via the main bot."""
-    main = MAIN.get("bot")
-    if not main or not main.db_channel:
-        return
-    if (getattr(media, "file_size", 0) or 0) > MAX_ARCHIVE:
-        LOGGER.info(f"[{client.username}] file #{file_no} too big to archive (link still works).")
-        return
-    async with ARCHIVE_SEM:
-        path = None
-        try:
-            path = await client.download_media(message)
-            sent = await main.send_document(CHANNEL_ID, path, caption=caption)
-            await db.set_archive(client.bot_id, file_no, sent.id)
-        except Exception as e:
-            LOGGER.warning(f"[{client.username}] archive of file #{file_no} failed: {e}")
-        finally:
-            if path and os.path.exists(path):
-                try:
-                    os.remove(path)
-                except Exception:
-                    pass
-
-
-MAX_IMPORT = 1000  # max messages per clone /batch
-
-
-async def _clone_import(client, message, first, last):
-    """Clone /batch: read first..last from the owner's channel, register the files for this clone
-    (links work instantly) and copy every file to the main bot's DB channel in the background."""
-    own = client.cfg["own_channel"]
-    if first > last:
-        first, last = last, first
-    if last - first + 1 > MAX_IMPORT:
-        return await message.reply_text(
-            f"\u274c 𝚃𝚘𝚘 𝚖𝚊𝚗𝚢 𝚖𝚎𝚜𝚜𝚊𝚐𝚎𝚜. 𝙼𝚊𝚡 {MAX_IMPORT} 𝚙𝚎𝚛 𝚋𝚊𝚝𝚌𝚑.", quote=True)
-
-    status = await message.reply_text("\u23f3 𝚁𝚎𝚊𝚍𝚒𝚗𝚐 𝚢𝚘𝚞𝚛 𝚌𝚑𝚊𝚗𝚗𝚎𝚕...", quote=True)
-    ids = list(range(first, last + 1))
-    new_ids, skipped = [], 0
-    for i in range(0, len(ids), 200):
-        chunk = ids[i:i + 200]
-        try:
-            try:
-                msgs = await client.get_messages(own, chunk)
-            except FloodWait as e:
-                await asyncio.sleep(e.value)
-                msgs = await client.get_messages(own, chunk)
-        except Exception as e:
-            return await status.edit_text(
-                f"\u274c 𝙲𝚘𝚞𝚕𝚍𝚗'𝚝 𝚛𝚎𝚊𝚍 𝚢𝚘𝚞𝚛 𝚌𝚑𝚊𝚗𝚗𝚎𝚕: <code>{e}</code>\n"
-                f"𝙼𝚊𝚔𝚎 𝚜𝚞𝚛𝚎 𝚝𝚑𝚒𝚜 𝚋𝚘𝚝 𝚒𝚜 𝚊𝚍𝚖𝚒𝚗 𝚒𝚗 𝚝𝚑𝚊𝚝 𝚌𝚑𝚊𝚗𝚗𝚎𝚕.")
-        for msg in msgs:
-            media = getattr(msg, msg.media.value, None) if msg and not msg.empty and msg.media else None
-            file_id = getattr(media, "file_id", None)
-            if not file_id:
-                skipped += 1
-                continue
-            caption = msg.caption.html if msg.caption else ""
-            new_id = await db.next_file_id(client.bot_id)
-            await db.add_file(client.bot_id, new_id, file_id, caption)
-            asyncio.create_task(_archive(client, msg, new_id, caption, media))
-            new_ids.append(new_id)
-
-    if not new_ids:
-        return await status.edit_text(
-            f"\u274c 𝙽𝚘 𝚏𝚒𝚕𝚎𝚜 𝚏𝚘𝚞𝚗𝚍 𝚋𝚎𝚝𝚠𝚎𝚎𝚗 𝚝𝚑𝚘𝚜𝚎 𝚝𝚠𝚘 𝚖𝚎𝚜𝚜𝚊𝚐𝚎𝚜.")
-    note = f" ({skipped} 𝚜𝚔𝚒𝚙𝚙𝚎𝚍)" if skipped else ""
-    await status.edit_text(
-        f"\u2705 𝙰𝚍𝚍𝚎𝚍 {len(new_ids)} 𝚏𝚒𝚕𝚎𝚜{note}.\n"
-        f"𝙲𝚘𝚙𝚢𝚒𝚗𝚐 𝚝𝚑𝚎𝚖 𝚝𝚘 𝚝𝚑𝚎 𝚖𝚊𝚒𝚗 𝚍𝚊𝚝𝚊𝚋𝚊𝚜𝚎 𝚌𝚑𝚊𝚗𝚗𝚎𝚕 𝚒𝚗 𝚝𝚑𝚎 𝚋𝚊𝚌𝚔𝚐𝚛𝚘𝚞𝚗𝚍.")
-    abs_ch = abs(client.cfg["db_channel"])
-    if len(new_ids) == 1:
-        return await _send_link(client, message, f"get-{new_ids[0] * abs_ch}")
-    await _send_link(client, message, f"get-{min(new_ids) * abs_ch}-{max(new_ids) * abs_ch}")
-
-
-@Bot.on_message(filters.private & admins & MEDIA & can_store & ~filters.regex(r"^/"))
-async def store(client, message):
-    if not _ready(client):
-        return await message.reply_text(NOT_READY, quote=True)
-    ch = client.cfg["db_channel"]
-    caption = message.caption.html if message.caption else ""
-
-    if client.is_clone:
-        # Instant: link uses the clone's own file_id; archiving to the main channel runs in background
-        media = getattr(message, message.media.value)
-        new_id = await db.next_file_id(client.bot_id)
-        await db.add_file(client.bot_id, new_id, media.file_id, caption)
-        asyncio.create_task(_archive(client, message, new_id, caption, media))
-    else:
-        try:
-            copied = await message.copy(ch)
-        except Exception as e:
-            return await message.reply_text(f"\u274c 𝙲𝚘𝚞𝚕𝚍𝚗'𝚝 𝚜𝚝𝚘𝚛𝚎: <code>{e}</code>", quote=True)
-        new_id = copied.id
-
-    st = STATE.get(_key(client, message))
-    if st:  # batch collect mode
-        st["ids"].append(new_id)
-        return await message.reply_text(f"\u2705 𝙰𝚍𝚍𝚎𝚍 ({len(st['ids'])}). 𝚂𝚎𝚗𝚍 𝚖𝚘𝚛𝚎 𝚘𝚛 /done.", quote=True)
-    await _send_link(client, message, f"get-{new_id * abs(ch)}")
-
-
-# ---------- link commands ----------
-
-@Bot.on_message(filters.private & admins & filters.command("genlink"))
-async def genlink(client, message):
-    if client.is_clone and not client.cfg["own_channel"]:
-        return await message.reply_text("𝙹𝚞𝚜𝚝 𝚜𝚎𝚗𝚍 𝚊 𝚏𝚒𝚕𝚎 𝚝𝚘 𝚝𝚑𝚒𝚜 𝚋𝚘𝚝 𝚊𝚗𝚍 𝚢𝚘𝚞'𝚕𝚕 𝚐𝚎𝚝 𝚒𝚝𝚜 𝚕𝚒𝚗𝚔.")
-    if not _ready(client):
-        return await message.reply_text(NOT_READY)
-    STATE[_key(client, message)] = {"mode": "lg_single"}
-    await message.reply_text(
-        "𝙵𝚘𝚛𝚠𝚊𝚛𝚍 𝚝𝚑𝚎 𝚖𝚎𝚜𝚜𝚊𝚐𝚎 𝚏𝚛𝚘𝚖 𝚝𝚑𝚎 𝙳𝙱 𝚌𝚑𝚊𝚗𝚗𝚎𝚕 (𝚠𝚒𝚝𝚑 𝚚𝚞𝚘𝚝𝚎𝚜) 𝚘𝚛 𝚜𝚎𝚗𝚍 𝚒𝚝𝚜 𝚙𝚘𝚜𝚝 𝚕𝚒𝚗𝚔.\n/cancel 𝚝𝚘 𝚊𝚋𝚘𝚛𝚝."
-    )
-
-
-@Bot.on_message(filters.private & admins & filters.command("batch"))
-async def batch(client, message):
-    if not _ready(client):
-        return await message.reply_text(NOT_READY)
-    if client.is_clone and not client.cfg["own_channel"]:
-        STATE[_key(client, message)] = {"mode": "lg_collect", "ids": []}
-        return await message.reply_text(
-            "𝚂𝚎𝚗𝚍 𝚝𝚑𝚎 𝚏𝚒𝚕𝚎𝚜 𝚏𝚘𝚛 𝚝𝚑𝚒𝚜 𝚋𝚊𝚝𝚌𝚑, 𝚝𝚑𝚎𝚗 𝚜𝚎𝚗𝚍 /done.\n/cancel 𝚝𝚘 𝚊𝚋𝚘𝚛𝚝.\n\n"
-            "𝚃𝚒𝚙: 𝚕𝚒𝚗𝚔 𝚢𝚘𝚞𝚛 𝚘𝚠𝚗 𝚌𝚑𝚊𝚗𝚗𝚎𝚕 (𝚖𝚊𝚒𝚗 𝚋𝚘𝚝 > /settings > 𝚢𝚘𝚞𝚛 𝚌𝚕𝚘𝚗𝚎 > 𝙳𝙱 𝙲𝙷𝙰𝙽𝙽𝙴𝙻) 𝚝𝚘 𝚖𝚊𝚔𝚎 𝚊 𝚋𝚊𝚝𝚌𝚑 𝚋𝚢 𝚏𝚘𝚛𝚠𝚊𝚛𝚍𝚒𝚗𝚐 𝚝𝚑𝚎 𝚏𝚒𝚛𝚜𝚝 𝚊𝚗𝚍 𝚕𝚊𝚜𝚝 𝚖𝚎𝚜𝚜𝚊𝚐𝚎 𝚏𝚛𝚘𝚖 𝚒𝚝."
+    if name == "start":
+        pic = "set \u2705" if cfg["start_pic"] else "not set"
+        return (
+            f"\U0001f4dd <b>Start Message</b>\n\n{cfg['start_msg']}\n\n\U0001f5bc Picture: {pic}",
+            M([[B("\u270f\ufe0f Set Message", callback_data=cd(t, "startmsg")),
+                B("\U0001f5bc Set Picture", callback_data=cd(t, "startpic"))],
+               [B("\u267b\ufe0f Reset", callback_data=cd(t, "startreset"))], back]),
         )
-    STATE[_key(client, message)] = {"mode": "lg_first"}
-    await message.reply_text(
-        "𝙵𝚘𝚛𝚠𝚊𝚛𝚍 𝚝𝚑𝚎 <b>𝚏𝚒𝚛𝚜𝚝</b> 𝚖𝚎𝚜𝚜𝚊𝚐𝚎 𝚏𝚛𝚘𝚖 𝚝𝚑𝚎 𝙳𝙱 𝚌𝚑𝚊𝚗𝚗𝚎𝚕 (𝚠𝚒𝚝𝚑 𝚚𝚞𝚘𝚝𝚎𝚜) 𝚘𝚛 𝚜𝚎𝚗𝚍 𝚒𝚝𝚜 𝚕𝚒𝚗𝚔.\n/cancel 𝚝𝚘 𝚊𝚋𝚘𝚛𝚝."
+
+    if name == "force":
+        rows = [[B(f"\u274c {t.fsub_titles.get(ch, ch)}", callback_data=cd(t, "fdel", ch))]
+                for ch in cfg["force"]]
+        if len(cfg["force"]) < 4:
+            rows.append([B("\u2795 Add Channel", callback_data=cd(t, "fadd"))])
+        rows.append(back)
+        return (
+            f"\U0001f4e2 <b>Force Sub</b> ({len(cfg['force'])}/4)\n\n"
+            "Users must join these channels before getting files.\nTap a channel to remove it.",
+            M(rows),
+        )
+
+    if name == "dbch":
+        ch = cfg.get("own_channel")
+        if ch:
+            title = html.escape(getattr(t.own_chat, "title", None) or "")
+            cur = f"<b>{title}</b> <code>{ch}</code>" if title else f"<code>{ch}</code>"
+        else:
+            cur = "not set"
+        rows = [[B("\u270f\ufe0f Set Channel" if not ch else "\u270f\ufe0f Change Channel",
+                   callback_data=cd(t, "dbchset"))]]
+        if ch:
+            rows.append([B("\u274c Remove", callback_data=cd(t, "dbchdel"))])
+        rows.append(back)
+        return (
+            "\U0001f5c4 <b>DB Channel</b>\n\n"
+            f"Current: {cur}\n\n"
+            f"1. Create a channel (private is fine)\n"
+            f"2. Add @{t.username} as <b>admin</b> there\n"
+            "3. Tap <b>Set Channel</b> and send the channel ID or forward a message from it\n\n"
+            "Then send /batch to the clone: forward the <b>first</b> and the <b>last</b> message "
+            "from that channel and the files are saved in the main database channel too.",
+            M(rows),
+        )
+
+    if name == "mods":
+        rows = [[B(f"\u274c {m}", callback_data=cd(t, "mdel", m))] for m in cfg["mods"]]
+        rows.append([B("\u2795 Add Moderator", callback_data=cd(t, "madd"))])
+        rows.append(back)
+        return (
+            "\U0001f46e <b>Moderators</b>\n\nModerators can store files in the clone and use its admin commands.\n"
+            "Tap an ID to remove it.",
+            M(rows),
+        )
+
+    if name == "ad":
+        cur = int(cfg["auto_delete"])
+        return (
+            f"\U0001f5d1 <b>Auto Delete</b>\n\nCurrent: <b>{get_readable_time(cur) if cur else 'OFF'}</b>\n\n"
+            "Delivered files are deleted from the user's chat after this time.",
+            M([[B("OFF", callback_data=cd(t, "adset", 0)), B("5 min", callback_data=cd(t, "adset", 300)),
+                B("10 min", callback_data=cd(t, "adset", 600))],
+               [B("30 min", callback_data=cd(t, "adset", 1800)), B("1 hour", callback_data=cd(t, "adset", 3600)),
+                B("\u270f\ufe0f Custom", callback_data=cd(t, "adcustom"))], back]),
+        )
+
+    if name == "nf":
+        on = cfg["no_forward"]
+        return (
+            f"\U0001f6ab <b>No Forward</b>\n\nStatus: <b>{_onoff(on)}</b>\n\nWhen ON, files can't be forwarded or saved.",
+            M([[B("Turn OFF" if on else "Turn ON", callback_data=cd(t, "nftoggle"))], back]),
+        )
+
+    if name == "tok":
+        api = cfg["short_api"]
+        masked = ("\u2022\u2022\u2022" + api[-4:]) if api else "not set"
+        on = cfg["token_on"]
+        return (
+            "\U0001f511 <b>Access Token</b>\n\n"
+            f"Status: <b>{_onoff(on)}</b>\n"
+            f"Shortener: <code>{html.escape(cfg['short_site'] or 'not set')}</code>\n"
+            f"API: <code>{masked}</code>\n"
+            f"Validity: <b>{cfg['token_hours']}h</b>\n\n"
+            "Users verify through your shortener link to unlock files for the validity period.",
+            M([[B("Turn OFF" if on else "Turn ON", callback_data=cd(t, "toktoggle"))],
+               [B("\U0001f310 Set Site", callback_data=cd(t, "toksite")), B("\U0001f511 Set API", callback_data=cd(t, "tokapi"))],
+               [B("6h", callback_data=cd(t, "tokh", 6)), B("12h", callback_data=cd(t, "tokh", 12)),
+                B("24h", callback_data=cd(t, "tokh", 24)), B("48h", callback_data=cd(t, "tokh", 48))], back]),
+        )
+
+    if name == "mode":
+        m = cfg["mode"]
+        return (
+            f"\U0001f501 <b>Mode</b>\n\nCurrent: <b>{m.upper()}</b>\n\n"
+            "\u2022 PUBLIC \u2013 anyone with a link can get files\n"
+            "\u2022 PRIVATE \u2013 only the owner and moderators can get files",
+            M([[B("Switch to PRIVATE" if m == "public" else "Switch to PUBLIC",
+                  callback_data=cd(t, "modetoggle"))], back]),
+        )
+
+    if name == "stats":
+        users = await db.count_users(t.bot_id)
+        up = get_readable_time((datetime.now() - t.uptime).total_seconds())
+        ad = int(cfg["auto_delete"])
+        return (
+            "\U0001f4ca <b>Stats</b>\n\n"
+            f"\U0001f916 Bot: @{t.username}\n"
+            f"\U0001f465 Users: <b>{users}</b>\n"
+            f"\u23f1 Uptime: <b>{up}</b>\n"
+            f"\u26a1 Status: <b>{'Active' if cfg['active'] else 'Deactivated'}</b>\n"
+            "\U0001f5c4 Storage: <b>Main DB channel</b>\n"
+            f"\U0001f501 Mode: <b>{cfg['mode'].upper()}</b>\n"
+            f"\U0001f4e2 Force sub: <b>{len(t.force_channels)}</b>\n"
+            f"\U0001f46e Moderators: <b>{len(cfg['mods'])}</b>\n"
+            f"\U0001f5d1 Auto delete: <b>{get_readable_time(ad) if ad else 'OFF'}</b>\n"
+            f"\U0001f6ab No forward: <b>{_onoff(cfg['no_forward'])}</b>\n"
+            f"\U0001f511 Access token: <b>{_onoff(cfg['token_on'])}</b>",
+            M([back]),
+        )
+
+    if name == "del":
+        return (
+            "\u26a0\ufe0f <b>Delete this clone?</b>\n\nThis removes the clone and all its data permanently.",
+            M([[B("\u2705 Yes, delete", callback_data=cd(t, "delyes")), B("\u274c No", callback_data=cd(t, "menu"))]]),
+        )
+
+    return menu_text(t), menu_markup(t)
+
+
+async def _show(q, text, markup):
+    try:
+        await q.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
+    except Exception:
+        pass
+
+
+# ---------------- commands ----------------
+
+@Bot.on_message(filters.private & (filters.command("clone") | filters.command("settings")))
+async def clones_cmd(client, message):
+    text, markup = clones_view(client, message.from_user.id)
+    await message.reply_text(text, reply_markup=markup, quote=True)
+
+
+# ---------------- callbacks ----------------
+
+PROMPTS = {
+    "startmsg": ("cs_startmsg",
+                 "Send the new <b>start message</b> (HTML allowed).\n"
+                 "Fillings: <code>{first} {last} {username} {mention} {id}</code>", "start"),
+    "startpic": ("cs_startpic", "Send a <b>photo</b> from your gallery to use as the start picture.", "start"),
+    "dbchset": ("cs_dbch",
+                "Add the clone as <b>admin</b> in your channel, then send the <b>channel ID</b> "
+                "(like <code>-100\u2026</code>) or forward any message from the channel.", "dbch"),
+    "fadd": ("cs_fadd",
+             "Send the <b>channel ID</b> (like <code>-100\u2026</code>) or forward any message from the channel.\n"
+             "The main bot must be admin there so it can add the clone.", "force"),
+    "madd": ("cs_madd", "Send the <b>user ID</b> or forward a message from that user.", "mods"),
+    "adcustom": ("cs_adcustom", "Send the auto delete time in <b>seconds</b> (0 = off).", "ad"),
+    "toksite": ("cs_toksite", "Send your shortener <b>site</b> (e.g. <code>gplinks.in</code>).", "tok"),
+    "tokapi": ("cs_tokapi", "Send your shortener <b>API key</b>.", "tok"),
+}
+SCREENS = ("menu", "start", "dbch", "force", "mods", "ad", "nf", "tok", "mode", "stats", "del")
+
+
+async def _cb(_, client, q):
+    return bool(
+        not client.is_clone and q.from_user and (q.data or "").startswith(("cs:", "mc:"))
     )
 
 
-@Bot.on_message(filters.private & admins & filters.command("done"))
-async def done(client, message):
-    key = _key(client, message)
-    st = STATE.get(key)
-    if not st or st["mode"] != "lg_collect":
-        return await message.reply_text("𝙽𝚘 𝚋𝚊𝚝𝚌𝚑 𝚒𝚗 𝚙𝚛𝚘𝚐𝚛𝚎𝚜𝚜. 𝚂𝚝𝚊𝚛𝚝 𝚘𝚗𝚎 𝚠𝚒𝚝𝚑 /batch.")
-    STATE.pop(key, None)
-    ids = st["ids"]
-    if not ids:
-        return await message.reply_text("\u274c 𝚈𝚘𝚞 𝚍𝚒𝚍𝚗'𝚝 𝚜𝚎𝚗𝚍 𝚊𝚗𝚢 𝚏𝚒𝚕𝚎𝚜.")
-    abs_ch = abs(client.cfg["db_channel"])
-    if len(ids) == 1:
-        return await _send_link(client, message, f"get-{ids[0] * abs_ch}")
-    await _send_link(client, message, f"get-{min(ids) * abs_ch}-{max(ids) * abs_ch}")
+cb_filter = filters.create(_cb)
 
 
-@Bot.on_message(filters.private & filters.command("cancel"))
-async def cancel(client, message):
-    if STATE.pop(_key(client, message), None) is not None:
-        await message.reply_text("𝙲𝚊𝚗𝚌𝚎𝚕𝚕𝚎𝚍.")
+@Bot.on_callback_query(cb_filter)
+async def callbacks(client, q):
+    parts = q.data.split(":")
+    uid = q.from_user.id
+    key = (client.bot_id, uid)
+    STATE.pop(key, None)  # any navigation cancels pending input
+
+    # ----- clone list -----
+    if parts[0] == "mc":
+        act = parts[1]
+        if act == "menu":
+            await _show(q, *clones_view(client, uid))
+        elif act == "add":
+            if CLONE_ADMIN_ONLY and not is_admin(client, uid):
+                return await q.answer("Only admins can create clones.", show_alert=True)
+            STATE[key] = {"mode": "cl_token"}
+            await _show(q, CLONE_HELP, M([[B("\u2b05\ufe0f Back", callback_data="mc:menu")]]))
+        elif act == "sel":
+            t = CLONES.get(parts[2])
+            if not t or not can_manage(client, t, uid):
+                return await q.answer("Clone not found.", show_alert=True)
+            await _show(q, menu_text(t), menu_markup(t))
+        return await q.answer()
+
+    # ----- clone panel -----
+    bot_id, act = parts[1], parts[2]
+    arg = parts[3] if len(parts) > 3 else None
+    t = CLONES.get(bot_id)
+    if not t or not can_manage(client, t, uid):
+        return await q.answer("Clone not found or not yours.", show_alert=True)
+    cfg = t.cfg
+
+    if act == "menu":
+        await _show(q, menu_text(t), menu_markup(t))
+
+    elif act in SCREENS:
+        await _show(q, *await render(t, act))
+
+    elif act in PROMPTS:
+        mode, text, back_to = PROMPTS[act]
+        STATE[key] = {"mode": mode, "bot": bot_id}
+        await _show(q, text + "\n\n/cancel or tap Back to abort.",
+                    M([[B("\u2b05\ufe0f Back", callback_data=cd(t, back_to))]]))
+
+    elif act == "startreset":
+        cfg["start_msg"], cfg["start_pic"] = START_MESSAGE, ""
+        t.pic_id = None
+        await db.del_pic(t.bot_id)
+        await t.save_cfg()
+        await _show(q, *await render(t, "start"))
+
+    elif act == "dbchdel":
+        cfg["own_channel"] = 0
+        t.own_chat = None
+        await t.save_cfg()
+        await _show(q, *await render(t, "dbch"))
+
+    elif act == "fdel":
+        ch = int(arg)
+        if ch in cfg["force"]:
+            cfg["force"].remove(ch)
+            await t.save_cfg()
+            await t.setup_force()
+        await _show(q, *await render(t, "force"))
+
+    elif act == "mdel":
+        mid = int(arg)
+        if mid in cfg["mods"]:
+            cfg["mods"].remove(mid)
+            await t.save_cfg()
+        await _show(q, *await render(t, "mods"))
+
+    elif act == "adset":
+        cfg["auto_delete"] = int(arg)
+        await t.save_cfg()
+        await _show(q, *await render(t, "ad"))
+
+    elif act == "nftoggle":
+        cfg["no_forward"] = not cfg["no_forward"]
+        await t.save_cfg()
+        await _show(q, *await render(t, "nf"))
+
+    elif act == "toktoggle":
+        if not cfg["token_on"] and not (cfg["short_site"] and cfg["short_api"]):
+            return await q.answer("Set the shortener site & API first.", show_alert=True)
+        cfg["token_on"] = not cfg["token_on"]
+        await t.save_cfg()
+        await _show(q, *await render(t, "tok"))
+
+    elif act == "tokh":
+        cfg["token_hours"] = int(arg)
+        await t.save_cfg()
+        await _show(q, *await render(t, "tok"))
+
+    elif act == "modetoggle":
+        cfg["mode"] = "private" if cfg["mode"] == "public" else "public"
+        await t.save_cfg()
+        await _show(q, *await render(t, "mode"))
+
+    elif act == "deact":
+        cfg["active"] = not cfg["active"]
+        await t.save_cfg()
+        await _show(q, menu_text(t), menu_markup(t))
+
+    elif act == "restart":
+        await _show(q, "\u267b\ufe0f <b>Restarting clone...</b>", None)
+        new = await restart_clone(bot_id, client)
+        if new:
+            await _show(q, "\u2705 <b>Clone restarted.</b>\n\n" + menu_text(new), menu_markup(new))
+        else:
+            await _show(q, "\u274c <b>Restart failed.</b> Check the logs.",
+                        M([[B("\u2b05\ufe0f Back", callback_data="mc:menu")]]))
+
+    elif act == "delyes":
+        await stop_clone(bot_id)
+        await db.del_clone(bot_id)
+        await db.del_settings(bot_id)
+        await db.del_bot_users(bot_id)
+        await db.del_bot_files(bot_id)
+        await db.del_pic(bot_id)
+        await _show(q, "\U0001f5d1 <b>Clone deleted.</b>", M([[B("\u2b05\ufe0f Back", callback_data="mc:menu")]]))
+
+    await q.answer()
 
 
-@Bot.on_message(filters.private & admins & in_state("lg_") & ~filters.regex(r"^/"), group=1)
-async def collect(client, message):
-    key = _key(client, message)
+# ---------------- input collection ----------------
+
+def _chan_id(message):
+    txt = (message.text or "").strip()
+    if re.fullmatch(r"-?\d+", txt):
+        return int(txt)
+    _, chat, _ = forward_info(message)
+    return chat.id if chat else None
+
+
+async def _probe(t, ch):
+    chat = await t.get_chat(ch)
+    if not chat.invite_link:
+        await t.export_chat_invite_link(ch)
+    return chat
+
+
+async def _prep_force(main, t, ch):
+    """Make sure the clone can read/invite in the channel (main bot promotes it if needed)."""
+    try:
+        await _probe(t, ch)
+        return
+    except Exception:
+        pass
+    await main.promote_chat_member(
+        ch, int(t.bot_id), privileges=ChatPrivileges(can_manage_chat=True, can_invite_users=True)
+    )
+    await _probe(t, ch)
+
+
+@Bot.on_message(filters.private & in_state("cs_") & ~filters.regex(r"^/"), group=1)
+async def cs_input(client, message):
+    key = (client.bot_id, message.from_user.id)
     st = STATE[key]
-    if st["mode"] == "lg_collect":
-        if message.media:
-            return  # handled by store()
-        return await message.reply_text("𝚂𝚎𝚗𝚍 𝚏𝚒𝚕𝚎𝚜 (𝚗𝚘𝚝 𝚝𝚎𝚡𝚝), 𝚘𝚛 /done 𝚝𝚘 𝚏𝚒𝚗𝚒𝚜𝚑.", quote=True)
+    mode = st["mode"]
+    t = CLONES.get(st.get("bot"))
+    if not t:
+        STATE.pop(key, None)
+        return await message.reply_text("\u274c Clone not found.")
+    cfg = t.cfg
+    text = (message.text or "").strip()
 
-    msg_id = await get_message_id(client, message)
-    if not msg_id:
-        return await message.reply_text(
-            "\u274c 𝚃𝚑𝚊𝚝 𝚒𝚜𝚗'𝚝 𝚏𝚛𝚘𝚖 𝚝𝚑𝚎 𝙳𝙱 𝚌𝚑𝚊𝚗𝚗𝚎𝚕. 𝙵𝚘𝚛𝚠𝚊𝚛𝚍 𝚊𝚐𝚊𝚒𝚗 𝚘𝚛 /cancel.", quote=True
-        )
-    abs_ch = abs(client.cfg["db_channel"])
-    if st["mode"] == "lg_single":
+    async def done(msg, back):
         STATE.pop(key, None)
-        if client.is_clone:
-            return await _clone_import(client, message, msg_id, msg_id)
-        await _send_link(client, message, f"get-{msg_id * abs_ch}")
-    elif st["mode"] == "lg_first":
-        st.update(mode="lg_last", first=msg_id)
-        await message.reply_text("𝙽𝚘𝚠 𝚏𝚘𝚛𝚠𝚊𝚛𝚍 𝚝𝚑𝚎 <b>𝚕𝚊𝚜𝚝</b> 𝚖𝚎𝚜𝚜𝚊𝚐𝚎 (𝚘𝚛 𝚜𝚎𝚗𝚍 𝚒𝚝𝚜 𝚕𝚒𝚗𝚔).", quote=True)
-    else:
-        first = st["first"]
-        STATE.pop(key, None)
-        if client.is_clone:
-            return await _clone_import(client, message, first, msg_id)
-        await _send_link(client, message, f"get-{first * abs_ch}-{msg_id * abs_ch}")
+        await t.save_cfg()
+        await message.reply_text(
+            msg, quote=True, reply_markup=M([[B("\u2b05\ufe0f Back", callback_data=cd(t, back))]]))
+
+    async def fail(msg):
+        await message.reply_text(f"{msg}\n\nTry again or /cancel.", quote=True)
+
+    if mode == "cs_startmsg":
+        if not message.text:
+            return await fail("\u274c Send text.")
+        cfg["start_msg"] = message.text.html
+        return await done("\u2705 Start message updated.", "start")
+
+    if mode == "cs_startpic":
+        doc = message.document
+        is_img = bool(message.photo) or bool(doc and (doc.mime_type or "").startswith("image/"))
+        if not is_img:
+            return await fail("\u274c Please send a <b>photo</b> (not a link or text).")
+        try:
+            buf = await client.download_media(message, in_memory=True)
+            raw = bytes(buf.getbuffer())
+        except Exception as e:
+            return await fail(f"\u274c Couldn't read that photo: <code>{e}</code>")
+        if len(raw) > 8 * 1024 * 1024:
+            return await fail("\u274c That image is too big (max 8 MB).")
+        await db.set_pic(t.bot_id, raw)  # stored as bytes: each bot uploads it itself
+        t.pic_id = None
+        cfg["start_pic"] = "db"
+        return await done("\u2705 Start picture updated.", "start")
+
+    if mode == "cs_dbch":
+        ch = _chan_id(message)
+        if ch is None:
+            return await fail("\u274c Send a channel ID or forward a message from the channel.")
+        if ch == CHANNEL_ID:
+            return await fail("\u274c That is the main database channel. Use your own channel.")
+        try:
+            chat = await t.get_chat(ch)
+            probe = await t.send_message(chat.id, "\u2705 Clone linked to this channel.")
+            await probe.delete()
+        except Exception as e:
+            return await fail(f"\u274c Can't use that channel: <code>{e}</code>\n"
+                              f"Add @{t.username} as admin (post rights) there first.")
+        cfg["own_channel"] = chat.id
+        t.own_chat = chat
+        return await done(f"\u2705 DB channel set: <b>{html.escape(chat.title or str(chat.id))}</b>", "dbch")
+
+    if mode == "cs_fadd":
+        ch = _chan_id(message)
+        if ch is None:
+            return await fail("\u274c Send a channel ID or forward a message from the channel.")
+        if ch in cfg["force"]:
+            return await fail("\u274c That channel is already added.")
+        if len(cfg["force"]) >= 4:
+            return await fail("\u274c Maximum 4 force sub channels.")
+        try:
+            await _prep_force(client, t, ch)
+        except Exception as e:
+            return await fail(f"\u274c Can't use that channel: <code>{e}</code>\n"
+                              "Make the main bot (with add-admin rights) or the clone admin there.")
+        cfg["force"].append(ch)
+        await t.setup_force()
+        return await done("\u2705 Force sub channel added.", "force")
+
+    if mode == "cs_madd":
+        new = None
+        if text.lstrip("-").isdigit():
+            new = int(text)
+        else:
+            origin = getattr(message, "forward_origin", None)
+            u = getattr(origin, "sender_user", None) or getattr(message, "forward_from", None)
+            if u:
+                new = u.id
+        if not new:
+            return await fail("\u274c Send a numeric user ID or forward a message from the user.")
+        if new not in cfg["mods"]:
+            cfg["mods"].append(new)
+        await t.set_commands()
+        return await done("\u2705 Moderator added.", "mods")
+
+    if mode == "cs_adcustom":
+        if not text.isdigit():
+            return await fail("\u274c Send a number of seconds.")
+        cfg["auto_delete"] = int(text)
+        return await done("\u2705 Auto delete updated.", "ad")
+
+    if mode == "cs_toksite":
+        site = text.replace("https://", "").replace("http://", "").strip("/")
+        if not site or " " in site:
+            return await fail("\u274c Send a valid site like <code>gplinks.in</code>.")
+        cfg["short_site"] = site
+        return await done("\u2705 Shortener site saved.", "tok")
+
+    if mode == "cs_tokapi":
+        if not text:
+            return await fail("\u274c Send the API key as text.")
+        cfg["short_api"] = text
+        try:
+            await message.delete()  # hide the key
+        except Exception:
+            pass
+        return await done("\u2705 Shortener API saved.", "tok")
