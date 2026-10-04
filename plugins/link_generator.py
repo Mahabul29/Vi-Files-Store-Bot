@@ -7,7 +7,9 @@ import os
 from bot import Bot, MAIN
 from config import CHANNEL_ID, LOGGER
 from database.database import db
-from helper_func import admins, encode, get_message_id
+from pyrogram.errors import FloodWait
+
+from helper_func import admins, batch_channel, encode, get_message_id
 from state import STATE, in_state
 
 MEDIA = (
@@ -81,6 +83,59 @@ async def _archive(client, message, file_no, caption, media):
                     pass
 
 
+MAX_IMPORT = 1000  # max messages per clone /batch
+
+
+async def _clone_import(client, message, first, last):
+    """Clone /batch: read first..last from the owner's channel, register the files for this clone
+    (links work instantly) and copy every file to the main bot's DB channel in the background."""
+    own = client.cfg["own_channel"]
+    if first > last:
+        first, last = last, first
+    if last - first + 1 > MAX_IMPORT:
+        return await message.reply_text(
+            f"\u274c 𝚃𝚘𝚘 𝚖𝚊𝚗𝚢 𝚖𝚎𝚜𝚜𝚊𝚐𝚎𝚜. 𝙼𝚊𝚡 {MAX_IMPORT} 𝚙𝚎𝚛 𝚋𝚊𝚝𝚌𝚑.", quote=True)
+
+    status = await message.reply_text("\u23f3 𝚁𝚎𝚊𝚍𝚒𝚗𝚐 𝚢𝚘𝚞𝚛 𝚌𝚑𝚊𝚗𝚗𝚎𝚕...", quote=True)
+    ids = list(range(first, last + 1))
+    new_ids, skipped = [], 0
+    for i in range(0, len(ids), 200):
+        chunk = ids[i:i + 200]
+        try:
+            try:
+                msgs = await client.get_messages(own, chunk)
+            except FloodWait as e:
+                await asyncio.sleep(e.value)
+                msgs = await client.get_messages(own, chunk)
+        except Exception as e:
+            return await status.edit_text(
+                f"\u274c 𝙲𝚘𝚞𝚕𝚍𝚗'𝚝 𝚛𝚎𝚊𝚍 𝚢𝚘𝚞𝚛 𝚌𝚑𝚊𝚗𝚗𝚎𝚕: <code>{e}</code>\n"
+                f"𝙼𝚊𝚔𝚎 𝚜𝚞𝚛𝚎 𝚝𝚑𝚒𝚜 𝚋𝚘𝚝 𝚒𝚜 𝚊𝚍𝚖𝚒𝚗 𝚒𝚗 𝚝𝚑𝚊𝚝 𝚌𝚑𝚊𝚗𝚗𝚎𝚕.")
+        for msg in msgs:
+            media = getattr(msg, msg.media.value, None) if msg and not msg.empty and msg.media else None
+            file_id = getattr(media, "file_id", None)
+            if not file_id:
+                skipped += 1
+                continue
+            caption = msg.caption.html if msg.caption else ""
+            new_id = await db.next_file_id(client.bot_id)
+            await db.add_file(client.bot_id, new_id, file_id, caption)
+            asyncio.create_task(_archive(client, msg, new_id, caption, media))
+            new_ids.append(new_id)
+
+    if not new_ids:
+        return await status.edit_text(
+            f"\u274c 𝙽𝚘 𝚏𝚒𝚕𝚎𝚜 𝚏𝚘𝚞𝚗𝚍 𝚋𝚎𝚝𝚠𝚎𝚎𝚗 𝚝𝚑𝚘𝚜𝚎 𝚝𝚠𝚘 𝚖𝚎𝚜𝚜𝚊𝚐𝚎𝚜.")
+    note = f" ({skipped} 𝚜𝚔𝚒𝚙𝚙𝚎𝚍)" if skipped else ""
+    await status.edit_text(
+        f"\u2705 𝙰𝚍𝚍𝚎𝚍 {len(new_ids)} 𝚏𝚒𝚕𝚎𝚜{note}.\n"
+        f"𝙲𝚘𝚙𝚢𝚒𝚗𝚐 𝚝𝚑𝚎𝚖 𝚝𝚘 𝚝𝚑𝚎 𝚖𝚊𝚒𝚗 𝚍𝚊𝚝𝚊𝚋𝚊𝚜𝚎 𝚌𝚑𝚊𝚗𝚗𝚎𝚕 𝚒𝚗 𝚝𝚑𝚎 𝚋𝚊𝚌𝚔𝚐𝚛𝚘𝚞𝚗𝚍.")
+    abs_ch = abs(client.cfg["db_channel"])
+    if len(new_ids) == 1:
+        return await _send_link(client, message, f"get-{new_ids[0] * abs_ch}")
+    await _send_link(client, message, f"get-{min(new_ids) * abs_ch}-{max(new_ids) * abs_ch}")
+
+
 @Bot.on_message(filters.private & admins & MEDIA & can_store & ~filters.regex(r"^/"))
 async def store(client, message):
     if not _ready(client):
@@ -112,7 +167,7 @@ async def store(client, message):
 
 @Bot.on_message(filters.private & admins & filters.command("genlink"))
 async def genlink(client, message):
-    if client.is_clone:
+    if client.is_clone and not client.cfg["own_channel"]:
         return await message.reply_text("𝙹𝚞𝚜𝚝 𝚜𝚎𝚗𝚍 𝚊 𝚏𝚒𝚕𝚎 𝚝𝚘 𝚝𝚑𝚒𝚜 𝚋𝚘𝚝 𝚊𝚗𝚍 𝚢𝚘𝚞'𝚕𝚕 𝚐𝚎𝚝 𝚒𝚝𝚜 𝚕𝚒𝚗𝚔.")
     if not _ready(client):
         return await message.reply_text(NOT_READY)
@@ -126,10 +181,11 @@ async def genlink(client, message):
 async def batch(client, message):
     if not _ready(client):
         return await message.reply_text(NOT_READY)
-    if client.is_clone:
+    if client.is_clone and not client.cfg["own_channel"]:
         STATE[_key(client, message)] = {"mode": "lg_collect", "ids": []}
         return await message.reply_text(
-            "𝚂𝚎𝚗𝚍 𝚝𝚑𝚎 𝚏𝚒𝚕𝚎𝚜 𝚏𝚘𝚛 𝚝𝚑𝚒𝚜 𝚋𝚊𝚝𝚌𝚑, 𝚝𝚑𝚎𝚗 𝚜𝚎𝚗𝚍 /done.\n/cancel 𝚝𝚘 𝚊𝚋𝚘𝚛𝚝."
+            "𝚂𝚎𝚗𝚍 𝚝𝚑𝚎 𝚏𝚒𝚕𝚎𝚜 𝚏𝚘𝚛 𝚝𝚑𝚒𝚜 𝚋𝚊𝚝𝚌𝚑, 𝚝𝚑𝚎𝚗 𝚜𝚎𝚗𝚍 /done.\n/cancel 𝚝𝚘 𝚊𝚋𝚘𝚛𝚝.\n\n"
+            "𝚃𝚒𝚙: 𝚕𝚒𝚗𝚔 𝚢𝚘𝚞𝚛 𝚘𝚠𝚗 𝚌𝚑𝚊𝚗𝚗𝚎𝚕 (𝚖𝚊𝚒𝚗 𝚋𝚘𝚝 > /settings > 𝚢𝚘𝚞𝚛 𝚌𝚕𝚘𝚗𝚎 > 𝙳𝙱 𝙲𝙷𝙰𝙽𝙽𝙴𝙻) 𝚝𝚘 𝚖𝚊𝚔𝚎 𝚊 𝚋𝚊𝚝𝚌𝚑 𝚋𝚢 𝚏𝚘𝚛𝚠𝚊𝚛𝚍𝚒𝚗𝚐 𝚝𝚑𝚎 𝚏𝚒𝚛𝚜𝚝 𝚊𝚗𝚍 𝚕𝚊𝚜𝚝 𝚖𝚎𝚜𝚜𝚊𝚐𝚎 𝚏𝚛𝚘𝚖 𝚒𝚝."
         )
     STATE[_key(client, message)] = {"mode": "lg_first"}
     await message.reply_text(
@@ -176,6 +232,8 @@ async def collect(client, message):
     abs_ch = abs(client.cfg["db_channel"])
     if st["mode"] == "lg_single":
         STATE.pop(key, None)
+        if client.is_clone:
+            return await _clone_import(client, message, msg_id, msg_id)
         await _send_link(client, message, f"get-{msg_id * abs_ch}")
     elif st["mode"] == "lg_first":
         st.update(mode="lg_last", first=msg_id)
@@ -183,4 +241,6 @@ async def collect(client, message):
     else:
         first = st["first"]
         STATE.pop(key, None)
+        if client.is_clone:
+            return await _clone_import(client, message, first, msg_id)
         await _send_link(client, message, f"get-{first * abs_ch}-{msg_id * abs_ch}")
