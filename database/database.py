@@ -16,6 +16,7 @@ class Database:
         self.verified = self.db["verified_users"]
         self.files = self.db["clone_files"]
         self.counters = self.db["counters"]
+        self.pics = self.db["start_pics"]
 
     # ---- users (scoped per bot) ----
     async def add_user(self, bot: str, uid: int):
@@ -90,6 +91,17 @@ class Database:
     async def del_bot_files(self, bot: str):
         await self.files.delete_many({"bot": bot})
 
+    # ---- start picture (photo bytes, so every clone can upload it with its own bot) ----
+    async def set_pic(self, bot: str, data: bytes):
+        await self.pics.update_one({"_id": bot}, {"$set": {"data": data}}, upsert=True)
+
+    async def get_pic(self, bot: str):
+        doc = await self.pics.find_one({"_id": bot})
+        return bytes(doc["data"]) if doc and doc.get("data") else None
+
+    async def del_pic(self, bot: str):
+        await self.pics.delete_one({"_id": bot})
+
     # ---- access token verification ----
     async def create_token(self, bot: str, uid: int, token: str, payload: str):
         await self.tokens.insert_one(
@@ -110,4 +122,3 @@ class Database:
 
 
 db = Database(DB_URL, DB_NAME)
-        
