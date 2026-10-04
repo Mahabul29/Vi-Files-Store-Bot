@@ -15,14 +15,14 @@ def start_buttons(client):
     main = MAIN.get("bot")
     if client.is_clone and main and main.username:
         clone_btn = InlineKeyboardButton(
-            "𝙲𝚁𝙴𝙰𝚃𝙴 𝙼𝚈 𝙾𝚆𝙽 𝙲𝙻𝙾𝙽𝙴", url=f"https://t.me/{main.username}?start=clone")
+            "CREATE MY OWN CLONE", url=f"https://t.me/{main.username}?start=clone")
     else:
-        clone_btn = InlineKeyboardButton("𝙲𝚁𝙴𝙰𝚃𝙴 𝙼𝚈 𝙾𝚆𝙽 𝙲𝙻𝙾𝙽𝙴", callback_data="clone")
+        clone_btn = InlineKeyboardButton("CREATE MY OWN CLONE", callback_data="clone")
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("𝙷𝙴𝙻𝙿", callback_data="help"),
-         InlineKeyboardButton("𝙰𝙱𝙾𝚄𝚃", callback_data="about")],
+        [InlineKeyboardButton("HELP", callback_data="help"),
+         InlineKeyboardButton("ABOUT", callback_data="about")],
         [clone_btn],
-        [InlineKeyboardButton("𝙲𝙻𝙾𝚂𝙴", callback_data="close")],
+        [InlineKeyboardButton("CLOSE", callback_data="close")],
     ])
 
 _OK = {
@@ -125,8 +125,14 @@ def forward_info(message):
     return origin, chat, mid
 
 
+def batch_channel(client):
+    """Channel whose messages /batch and /genlink read: a clone's own channel, else the DB channel."""
+    return client.cfg.get("own_channel") if client.is_clone else client.cfg["db_channel"]
+
+
 async def get_message_id(client, message) -> int:
-    ch = client.cfg["db_channel"]
+    ch = batch_channel(client)
+    chat_obj = client.own_chat if client.is_clone else client.db_channel
     origin, fchat, fmid = forward_info(message)
     if fchat:
         return fmid if fchat.id == ch else 0
@@ -139,7 +145,7 @@ async def get_message_id(client, message) -> int:
         chan, msg_id = m.group(1), int(m.group(2))
         if chan.isdigit():
             return msg_id if f"-100{chan}" == str(ch) else 0
-        uname = getattr(client.db_channel, "username", None)
+        uname = getattr(chat_obj, "username", None)
         return msg_id if uname and chan.lower() == uname.lower() else 0
     return 0
 
@@ -149,5 +155,5 @@ def get_readable_time(seconds) -> str:
     d, r = divmod(seconds, 86400)
     h, r = divmod(r, 3600)
     m, s = divmod(r, 60)
-    parts = [f"{v}{u}" for v, u in ((d, "𝚍"), (h, "𝚑"), (m, "𝚖"), (s, "𝚜")) if v]
-    return " ".join(parts) or "0𝚜"
+    parts = [f"{v}{u}" for v, u in ((d, "d"), (h, "h"), (m, "m"), (s, "s")) if v]
+    return " ".join(parts) or "0s"
