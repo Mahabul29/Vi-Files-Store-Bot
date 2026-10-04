@@ -15,14 +15,14 @@ def start_buttons(client):
     main = MAIN.get("bot")
     if client.is_clone and main and main.username:
         clone_btn = InlineKeyboardButton(
-            "CREATE MY OWN CLONE", url=f"https://t.me/{main.username}?start=clone")
+            "𝙲𝚁𝙴𝙰𝚃𝙴 𝙼𝚈 𝙾𝚆𝙽 𝙲𝙻𝙾𝙽𝙴", url=f"https://t.me/{main.username}?start=clone")
     else:
-        clone_btn = InlineKeyboardButton("CREATE MY OWN CLONE", callback_data="clone")
+        clone_btn = InlineKeyboardButton("𝙲𝚁𝙴𝙰𝚃𝙴 𝙼𝚈 𝙾𝚆𝙽 𝙲𝙻𝙾𝙽𝙴", callback_data="clone")
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("HELP", callback_data="help"),
-         InlineKeyboardButton("ABOUT", callback_data="about")],
+        [InlineKeyboardButton("𝙷𝙴𝙻𝙿", callback_data="help"),
+         InlineKeyboardButton("𝙰𝙱𝙾𝚄𝚃", callback_data="about")],
         [clone_btn],
-        [InlineKeyboardButton("CLOSE", callback_data="close")],
+        [InlineKeyboardButton("𝙲𝙻𝙾𝚂𝙴", callback_data="close")],
     ])
 
 _OK = {
@@ -149,6 +149,5 @@ def get_readable_time(seconds) -> str:
     d, r = divmod(seconds, 86400)
     h, r = divmod(r, 3600)
     m, s = divmod(r, 60)
-    parts = [f"{v}{u}" for v, u in ((d, "d"), (h, "h"), (m, "m"), (s, "s")) if v]
-    return " ".join(parts) or "0s"
-    
+    parts = [f"{v}{u}" for v, u in ((d, "𝚍"), (h, "𝚑"), (m, "𝚖"), (s, "𝚜")) if v]
+    return " ".join(parts) or "0𝚜"
