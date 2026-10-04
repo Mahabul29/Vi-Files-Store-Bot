@@ -20,11 +20,11 @@ async def clone_token(client, message):
     key = (client.bot_id, uid)
     if CLONE_ADMIN_ONLY and not is_admin(client, uid):
         STATE.pop(key, None)
-        return await message.reply_text("\u274c 𝙾𝚗𝚕𝚢 𝚊𝚍𝚖𝚒𝚗𝚜 𝚌𝚊𝚗 𝚌𝚛𝚎𝚊𝚝𝚎 𝚌𝚕𝚘𝚗𝚎𝚜.", quote=True)
+        return await message.reply_text("\u274c Only admins can create clones.", quote=True)
 
     m = TOKEN_RE.search(message.text or "")
     if not m:
-        return await message.reply_text("\u274c 𝙽𝚘 𝚋𝚘𝚝 𝚝𝚘𝚔𝚎𝚗 𝚏𝚘𝚞𝚗𝚍. 𝚂𝚎𝚗𝚍 𝚒𝚝 𝚊𝚐𝚊𝚒𝚗 𝚘𝚛 /cancel.", quote=True)
+        return await message.reply_text("\u274c No bot token found. Send it again or /cancel.", quote=True)
     STATE.pop(key, None)
     token = m.group(0)
     try:
@@ -32,11 +32,11 @@ async def clone_token(client, message):
     except Exception:
         pass
 
-    wait = await message.reply_text("\u23f3 𝙲𝚛𝚎𝚊𝚝𝚒𝚗𝚐 𝚢𝚘𝚞𝚛 𝚌𝚕𝚘𝚗𝚎...")
+    wait = await message.reply_text("\u23f3 Creating your clone...")
     try:
         clone = await start_clone(token, uid)
     except Exception as e:
-        return await wait.edit_text(f"\u274c 𝙲𝚕𝚘𝚗𝚎 𝚏𝚊𝚒𝚕𝚎𝚍: <code>{e}</code>")
+        return await wait.edit_text(f"\u274c Clone failed: <code>{e}</code>")
 
     await db.add_clone(clone.bot_id, token, uid)
     await clone.save_cfg()
@@ -46,12 +46,12 @@ async def clone_token(client, message):
         try:
             await client.send_message(
                 OWNER_ID,
-                f"\u26a0\ufe0f 𝙰𝚍𝚍 @{clone.username} 𝚊𝚜 𝚊𝚍𝚖𝚒𝚗 (𝚙𝚘𝚜𝚝 𝚛𝚒𝚐𝚑𝚝𝚜) 𝚝𝚘 𝚝𝚑𝚎 𝚖𝚊𝚒𝚗 𝙳𝙱 𝚌𝚑𝚊𝚗𝚗𝚎𝚕.")
+                f"\u26a0\ufe0f Add @{clone.username} as admin (post rights) to the main DB channel.")
         except Exception:
             pass
 
     await wait.edit_text(
-        f"\u2705 <b>𝙲𝚕𝚘𝚗𝚎 𝚌𝚛𝚎𝚊𝚝𝚎𝚍:</b> @{clone.username}\n\n{menu_text(clone)}",
+        f"\u2705 <b>Clone created:</b> @{clone.username}\n\n{menu_text(clone)}",
         reply_markup=menu_markup(clone),
     )
 
@@ -59,18 +59,18 @@ async def clone_token(client, message):
 @Bot.on_message(filters.command("clones") & filters.private & admins)
 async def clones_list(client, message):
     if not CLONES:
-        return await message.reply_text("𝙽𝚘 𝚌𝚕𝚘𝚗𝚎𝚜 𝚛𝚞𝚗𝚗𝚒𝚗𝚐.")
-    text = "<b>𝚁𝚞𝚗𝚗𝚒𝚗𝚐 𝚌𝚕𝚘𝚗𝚎𝚜:</b>\n\n" + "\n".join(
-        f"\u2022 @{c.username} \u2014 <code>{bid}</code> (𝚘𝚠𝚗𝚎𝚛 <code>{c.owner_id}</code>)"
+        return await message.reply_text("No clones running.")
+    text = "<b>Running clones:</b>\n\n" + "\n".join(
+        f"\u2022 @{c.username} \u2014 <code>{bid}</code> (owner <code>{c.owner_id}</code>)"
         for bid, c in CLONES.items()
     )
-    await message.reply_text(text + "\n\n𝚁𝚎𝚖𝚘𝚟𝚎 𝚠𝚒𝚝𝚑 <code>/delclone BOT_ID</code>")
+    await message.reply_text(text + "\n\nRemove with <code>/delclone BOT_ID</code>")
 
 
 @Bot.on_message(filters.command("delclone") & filters.private & admins)
 async def delclone_cmd(client, message):
     if len(message.command) < 2:
-        return await message.reply_text("𝚄𝚜𝚊𝚐𝚎: <code>/delclone BOT_ID</code>")
+        return await message.reply_text("Usage: <code>/delclone BOT_ID</code>")
     bot_id = message.command[1]
     existed = bot_id in CLONES
     await stop_clone(bot_id)
@@ -78,4 +78,5 @@ async def delclone_cmd(client, message):
     await db.del_settings(bot_id)
     await db.del_bot_users(bot_id)
     await db.del_bot_files(bot_id)
-    await message.reply_text("\u2705 𝙲𝚕𝚘𝚗𝚎 𝚛𝚎𝚖𝚘𝚟𝚎𝚍." if existed else "𝚁𝚎𝚖𝚘𝚟𝚎𝚍 𝚏𝚛𝚘𝚖 𝙳𝙱 (𝚒𝚝 𝚠𝚊𝚜𝚗'𝚝 𝚛𝚞𝚗𝚗𝚒𝚗𝚐).")
+    await db.del_pic(bot_id)
+    await message.reply_text("\u2705 Clone removed." if existed else "Removed from DB (it wasn't running).")
