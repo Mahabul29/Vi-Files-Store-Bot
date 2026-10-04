@@ -14,8 +14,8 @@ from database.database import db
 
 CLONES = {}  # bot_id -> Bot instance
 MAIN = {}  # {'bot': main Bot instance}
-OLD_START = ("<b>Hello {first}!\n\nI store posts and files in a private channel and "
-             "share them through special links.</b>")
+OLD_START = ("<b>𝙷𝚎𝚕𝚕𝚘 {first}!\n\n𝙸 𝚜𝚝𝚘𝚛𝚎 𝚙𝚘𝚜𝚝𝚜 𝚊𝚗𝚍 𝚏𝚒𝚕𝚎𝚜 𝚒𝚗 𝚊 𝚙𝚛𝚒𝚟𝚊𝚝𝚎 𝚌𝚑𝚊𝚗𝚗𝚎𝚕 𝚊𝚗𝚍 "
+             "𝚜𝚑𝚊𝚛𝚎 𝚝𝚑𝚎𝚖 𝚝𝚑𝚛𝚘𝚞𝚐𝚑 𝚜𝚙𝚎𝚌𝚒𝚊𝚕 𝚕𝚒𝚗𝚔𝚜.</b>")
 MAIN_SAVED = ("auto_delete",)  # settings the main bot persists in DB
 
 
@@ -80,8 +80,8 @@ class Bot(Client):
                 titles[ch] = chat.title or str(ch)
                 chans.append(ch)
             except Exception as e:
-                LOGGER.warning(f"[{self.username}] Force sub channel {ch} skipped: {e}. "
-                               "Make the bot admin with invite-link permission.")
+                LOGGER.warning(f"[{self.username}] 𝙵𝚘𝚛𝚌𝚎 𝚜𝚞𝚋 𝚌𝚑𝚊𝚗𝚗𝚎𝚕 {ch} 𝚜𝚔𝚒𝚙𝚙𝚎𝚍: {e}. "
+                               "𝙼𝚊𝚔𝚎 𝚝𝚑𝚎 𝚋𝚘𝚝 𝚊𝚍𝚖𝚒𝚗 𝚠𝚒𝚝𝚑 𝚒𝚗𝚟𝚒𝚝𝚎-𝚕𝚒𝚗𝚔 𝚙𝚎𝚛𝚖𝚒𝚜𝚜𝚒𝚘𝚗.")
         self.invitelinks, self.fsub_titles, self.force_channels = links, titles, chans
 
     async def setup_db_channel(self) -> bool:
@@ -91,12 +91,12 @@ class Bot(Client):
             return False
         try:
             chat = await self.get_chat(ch)
-            test = await self.send_message(chat.id, "Test Message")
+            test = await self.send_message(chat.id, "𝚃𝚎𝚜𝚝 𝙼𝚎𝚜𝚜𝚊𝚐𝚎")
             await test.delete()
             self.db_channel = chat
             return True
         except Exception as e:
-            LOGGER.error(f"[{self.username}] Cannot access DB channel {ch}: {e}")
+            LOGGER.error(f"[{self.username}] 𝙲𝚊𝚗𝚗𝚘𝚝 𝚊𝚌𝚌𝚎𝚜𝚜 𝙳𝙱 𝚌𝚑𝚊𝚗𝚗𝚎𝚕 {ch}: {e}")
             self.db_channel = None
             return False
 
@@ -124,7 +124,7 @@ class Bot(Client):
         # clones store files through the main bot, so only the main bot needs the channel
         if not self.is_clone and not await self.setup_db_channel():
             await super().stop()
-            raise RuntimeError("Bot must be admin in the DB channel (check CHANNEL_ID).")
+            raise RuntimeError("𝙱𝚘𝚝 𝚖𝚞𝚜𝚝 𝚋𝚎 𝚊𝚍𝚖𝚒𝚗 𝚒𝚗 𝚝𝚑𝚎 𝙳𝙱 𝚌𝚑𝚊𝚗𝚗𝚎𝚕 (𝚌𝚑𝚎𝚌𝚔 𝙲𝙷𝙰𝙽𝙽𝙴𝙻_𝙸𝙳).")
 
         if not self.is_clone:
             from plugins.web_server import web_server
@@ -132,21 +132,21 @@ class Bot(Client):
             await self.runner.setup()
             await web.TCPSite(self.runner, "0.0.0.0", PORT).start()
 
-        LOGGER.info(f"Bot running as @{self.username}")
+        LOGGER.info(f"𝙱𝚘𝚝 𝚛𝚞𝚗𝚗𝚒𝚗𝚐 𝚊𝚜 @{self.username}")
 
     async def stop(self, *args):
         if self.runner:
             await self.runner.cleanup()
         await super().stop()
-        LOGGER.info(f"Bot @{self.username} stopped.")
+        LOGGER.info(f"𝙱𝚘𝚝 @{self.username} 𝚜𝚝𝚘𝚙𝚙𝚎𝚍.")
 
 
 async def start_clone(token: str, owner_id: int) -> "Bot":
     if token == BOT_TOKEN:
-        raise RuntimeError("You can't clone the main bot token.")
+        raise RuntimeError("𝚈𝚘𝚞 𝚌𝚊𝚗'𝚝 𝚌𝚕𝚘𝚗𝚎 𝚝𝚑𝚎 𝚖𝚊𝚒𝚗 𝚋𝚘𝚝 𝚝𝚘𝚔𝚎𝚗.")
     bot_id = token.split(":")[0]
     if bot_id in CLONES:
-        raise RuntimeError("This bot is already cloned.")
+        raise RuntimeError("𝚃𝚑𝚒𝚜 𝚋𝚘𝚝 𝚒𝚜 𝚊𝚕𝚛𝚎𝚊𝚍𝚢 𝚌𝚕𝚘𝚗𝚎𝚍.")
     clone = Bot(name=f"clone_{bot_id}", token=token, is_clone=True, owner_id=owner_id, bot_id=bot_id)
     await clone.start()
     CLONES[bot_id] = clone
@@ -159,7 +159,7 @@ async def stop_clone(bot_id: str):
         try:
             await c.stop()
         except Exception as e:
-            LOGGER.warning(f"Stopping clone {bot_id} failed: {e}")
+            LOGGER.warning(f"𝚂𝚝𝚘𝚙𝚙𝚒𝚗𝚐 𝚌𝚕𝚘𝚗𝚎 {bot_id} 𝚏𝚊𝚒𝚕𝚎𝚍: {e}")
 
 
 async def ensure_db_access(main, clone) -> bool:
@@ -174,7 +174,7 @@ async def ensure_db_access(main, clone) -> bool:
                 can_post_messages=True, can_edit_messages=True, can_delete_messages=True),
         )
     except Exception as e:
-        LOGGER.warning(f"Auto-promote of @{clone.username} in DB channel failed: {e}")
+        LOGGER.warning(f"𝙰𝚞𝚝𝚘-𝚙𝚛𝚘𝚖𝚘𝚝𝚎 𝚘𝚏 @{clone.username} 𝚒𝚗 𝙳𝙱 𝚌𝚑𝚊𝚗𝚗𝚎𝚕 𝚏𝚊𝚒𝚕𝚎𝚍: {e}")
     return await clone.setup_db_channel()
 
 
@@ -188,9 +188,8 @@ async def restart_clone(bot_id: str, main=None):
     try:
         new = await start_clone(token, owner)
     except Exception as e:
-        LOGGER.error(f"Restarting clone {bot_id} failed: {e}")
+        LOGGER.error(f"𝚁𝚎𝚜𝚝𝚊𝚛𝚝𝚒𝚗𝚐 𝚌𝚕𝚘𝚗𝚎 {bot_id} 𝚏𝚊𝚒𝚕𝚎𝚍: {e}")
         return None
     if main is not None:
         await ensure_db_access(main, new)
     return new
-        
