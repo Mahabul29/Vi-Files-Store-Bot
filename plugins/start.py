@@ -38,8 +38,8 @@ async def _auto_delete(sent, notice, link, delay):
         except Exception:
             pass
     try:
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton("♻️ Get Files Again", url=link)]]) if link else None
-        await notice.edit_text("<b>🗑 Your files were deleted. Tap below to get them again.</b>", reply_markup=markup)
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton("\u267b\ufe0f Get Files Again", url=link)]]) if link else None
+        await notice.edit_text("<b>\U0001f5d1 Your files were deleted. Tap below to get them again.</b>", reply_markup=markup)
     except Exception:
         pass
 
@@ -66,9 +66,9 @@ async def ask_token(client, message, payload):
     link = await shorten(client.cfg, f"https://t.me/{client.username}?start=verify_{token}")
     hours = client.cfg["token_hours"]
     await message.reply_text(
-        f"<b>🔒 Access token required\n\nVerify using the button below to unlock files for {hours} hour(s).</b>",
+        f"<b>\U0001f512 Access token required\n\nVerify using the button below to unlock files for {hours} hour(s).</b>",
         quote=True,
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔐 Verify Now", url=link)]]),
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("\U0001f510 Verify Now", url=link)]]),
     )
 
 
@@ -76,10 +76,10 @@ async def handle_verify(client, message, token):
     uid = message.from_user.id
     doc = await db.pop_token(client.bot_id, uid, token)
     if not doc:
-        return await message.reply_text("❌ Invalid or expired token. Open your file link again.", quote=True)
+        return await message.reply_text("\u274c Invalid or expired token. Open your file link again.", quote=True)
     if time.time() - doc["created"] < MIN_VERIFY_SECONDS:
         return await message.reply_text(
-            "⚠️ Verification too fast — please complete the verification page properly and try again.",
+            "\u26a0\ufe0f Verification too fast \u2014 please complete the verification page properly and try again.",
             quote=True,
         )
     hours = client.cfg["token_hours"]
@@ -87,9 +87,9 @@ async def handle_verify(client, message, token):
     rows = []
     if doc.get("payload"):
         rows.append([InlineKeyboardButton(
-            "📂 Get Files", url=f"https://t.me/{client.username}?start={doc['payload']}")])
+            "\U0001f4c2 Get Files", url=f"https://t.me/{client.username}?start={doc['payload']}")])
     await message.reply_text(
-        f"<b>✅ Verified! Access unlocked for {hours} hour(s).</b>",
+        f"<b>\u2705 Verified! Access unlocked for {hours} hour(s).</b>",
         quote=True,
         reply_markup=InlineKeyboardMarkup(rows) if rows else None,
     )
@@ -99,7 +99,7 @@ async def deliver(client, message, payload):
     cfg = client.cfg
     user = message.from_user
     if not client.is_clone and (not cfg["db_channel"] or not client.db_channel):
-        return await message.reply_text("⚠️ This bot isn't set up yet.", quote=True)
+        return await message.reply_text("\u26a0\ufe0f This bot isn't set up yet.", quote=True)
     try:
         argument = (await decode(payload)).split("-")
         abs_ch = abs(cfg["db_channel"])
@@ -111,13 +111,13 @@ async def deliver(client, message, payload):
         else:
             return
     except Exception:
-        return await message.reply_text("❌ Invalid or broken link.", quote=True)
+        return await message.reply_text("\u274c Invalid or broken link.", quote=True)
 
-    temp = await message.reply_text("⏳ Please wait...", quote=True)
+    temp = await message.reply_text("\u23f3 Please wait...", quote=True)
     # Clones deliver with their own file_ids (files are archived in the main DB channel)
     items = await db.get_files(client.bot_id, ids) if client.is_clone else await get_messages(client, ids)
     if not items:
-        return await temp.edit_text("❌ Files not found or deleted.")
+        return await temp.edit_text("\u274c Files not found or deleted.")
     await temp.delete()
 
     protect = cfg["no_forward"]
@@ -147,7 +147,7 @@ async def deliver(client, message, payload):
     if delay > 0 and sent:
         link = f"https://t.me/{client.username}?start={payload}"
         notice = await message.reply_text(
-            f"<b>⚠️ These files will be deleted in {get_readable_time(delay)}. "
+            f"<b>\u26a0\ufe0f These files will be deleted in {get_readable_time(delay)}. "
             "Forward them somewhere safe now.</b>"
         )
         asyncio.create_task(_auto_delete(sent, notice, link, delay))
@@ -165,15 +165,15 @@ async def start_command(client, message):
     # "Create my own clone" deep link from a clone bot
     if payload == "clone" and not client.is_clone:
         if CLONE_ADMIN_ONLY and not admin:
-            return await message.reply_text("❌ Only admins can create clones.", quote=True)
+            return await message.reply_text("\u274c Only admins can create clones.", quote=True)
         from plugins.settings import CLONE_HELP
         STATE[(client.bot_id, uid)] = {"mode": "cl_token"}
         return await message.reply_text(CLONE_HELP, quote=True)
 
     if not cfg["active"] and not admin:
-        return await message.reply_text("🚫 This bot is currently deactivated by its owner.", quote=True)
+        return await message.reply_text("\U0001f6ab This bot is currently deactivated by its owner.", quote=True)
     if cfg["mode"] == "private" and not admin:
-        return await message.reply_text("🔒 This bot is private.", quote=True)
+        return await message.reply_text("\U0001f512 This bot is private.", quote=True)
 
     if not payload:
         return await _reply(message, fill(cfg["start_msg"], user), start_buttons(client), cfg["start_pic"])
@@ -196,7 +196,7 @@ async def not_joined(client, message):
     cfg = client.cfg
     rows, row = [], []
     for i, ch in enumerate(missing, 1):
-        row.append(InlineKeyboardButton(f"📢 Join Channel {i}", url=client.invitelinks[ch]))
+        row.append(InlineKeyboardButton(f"\U0001f4e2 Join Channel {i}", url=client.invitelinks[ch]))
         if len(row) == 2:
             rows.append(row)
             row = []
@@ -204,7 +204,7 @@ async def not_joined(client, message):
         rows.append(row)
     if len(message.command) > 1:
         rows.append([InlineKeyboardButton(
-            "🔄 Try Again", url=f"https://t.me/{client.username}?start={message.command[1]}")])
+            "\U0001f504 Try Again", url=f"https://t.me/{client.username}?start={message.command[1]}")])
 
     await _reply(message, fill(cfg["force_msg"], message.from_user),
                  InlineKeyboardMarkup(rows), cfg["force_pic"])
@@ -214,7 +214,7 @@ async def not_joined(client, message):
 
 @Bot.on_message(filters.command("users") & filters.private & admins)
 async def users_count(client, message):
-    await message.reply_text(f"<b>👥 {await db.count_users(client.bot_id)} users use this bot.</b>")
+    await message.reply_text(f"<b>\U0001f465 {await db.count_users(client.bot_id)} users use this bot.</b>")
 
 
 @Bot.on_message(filters.command("stats") & filters.private & admins)
@@ -222,10 +222,10 @@ async def stats(client, message):
     up = get_readable_time((datetime.now() - client.uptime).total_seconds())
     delay = int(client.cfg["auto_delete"])
     await message.reply_text(
-        f"<b>⏱ Uptime:</b> {up}\n"
-        f"<b>👥 Users:</b> {await db.count_users(client.bot_id)}\n"
-        f"<b>🗑 Auto delete:</b> {get_readable_time(delay) if delay else 'off'}\n"
-        f"<b>📢 Force sub channels:</b> {len(client.force_channels)}"
+        f"<b>\u23f1 Uptime:</b> {up}\n"
+        f"<b>\U0001f465 Users:</b> {await db.count_users(client.bot_id)}\n"
+        f"<b>\U0001f5d1 Auto delete:</b> {get_readable_time(delay) if delay else 'off'}\n"
+        f"<b>\U0001f4e2 Force sub channels:</b> {len(client.force_channels)}"
     )
 
 
@@ -241,12 +241,12 @@ async def autodelete(client, message):
     if arg in ("off", "0"):
         client.cfg["auto_delete"] = 0
         await client.save_cfg()
-        return await message.reply_text("✅ Auto delete turned off.")
+        return await message.reply_text("\u2705 Auto delete turned off.")
     if not arg.isdigit():
-        return await message.reply_text("❌ Send a number of seconds or <code>off</code>.")
+        return await message.reply_text("\u274c Send a number of seconds or <code>off</code>.")
     client.cfg["auto_delete"] = int(arg)
     await client.save_cfg()
-    await message.reply_text(f"✅ Auto delete set to {get_readable_time(int(arg))}.")
+    await message.reply_text(f"\u2705 Auto delete set to {get_readable_time(int(arg))}.")
 
 
 @Bot.on_message(filters.command("broadcast") & filters.private & admins)
@@ -254,7 +254,7 @@ async def broadcast(client, message):
     if not message.reply_to_message:
         return await message.reply_text("Reply to a message to broadcast it.")
     users = await db.full_userbase(client.bot_id)
-    status = await message.reply_text("📡 Broadcasting...")
+    status = await message.reply_text("\U0001f4e1 Broadcasting...")
     ok = blocked = deleted = failed = 0
     for uid in users:
         try:
@@ -279,5 +279,4 @@ async def broadcast(client, message):
     await status.edit_text(
         f"<b>Broadcast done</b>\n\nTotal: {len(users)}\nSuccess: {ok}\n"
         f"Blocked: {blocked}\nDeleted accounts: {deleted}\nFailed: {failed}"
-        )
-        
+    )
