@@ -1,5 +1,5 @@
-import logging
 import os
+import logging
 
 logging.basicConfig(
     level=logging.INFO,
@@ -54,9 +54,9 @@ FORCE_PIC = os.environ.get("FORCE_PIC", "")
 
 START_MESSAGE = os.environ.get(
     "START_MESSAGE",
-    "<i>Hello {mention} \u2728\n\nI am a permanent file store bot and users can access "
-    "stored messages by using a shareable link given by me\n\n"
-    "To know more click help button</i>",
+    "<i>𝙷𝚎𝚕𝚕𝚘 {mention} \u2728\n\n𝙸 𝚊𝚖 𝚊 𝚙𝚎𝚛𝚖𝚊𝚗𝚎𝚗𝚝 𝚏𝚒𝚕𝚎 𝚜𝚝𝚘𝚛𝚎 𝚋𝚘𝚝 𝚊𝚗𝚍 𝚞𝚜𝚎𝚛𝚜 𝚌𝚊𝚗 𝚊𝚌𝚌𝚎𝚜𝚜 "
+    "𝚜𝚝𝚘𝚛𝚎𝚍 𝚖𝚎𝚜𝚜𝚊𝚐𝚎𝚜 𝚋𝚢 𝚞𝚜𝚒𝚗𝚐 𝚊 𝚜𝚑𝚊𝚛𝚎𝚊𝚋𝚕𝚎 𝚕𝚒𝚗𝚔 𝚐𝚒𝚟𝚎𝚗 𝚋𝚢 𝚖𝚎\n\n"
+    "𝚃𝚘 𝚔𝚗𝚘𝚠 𝚖𝚘𝚛𝚎 𝚌𝚕𝚒𝚌𝚔 𝚑𝚎𝚕𝚙 𝚋𝚞𝚝𝚝𝚘𝚗</i>",
 )
 FORCE_SUB_MESSAGE = os.environ.get(
     "FORCE_SUB_MESSAGE",
@@ -64,8 +64,7 @@ FORCE_SUB_MESSAGE = os.environ.get(
     "Join below, then tap <u>Try Again</u>.</b>",
 )
 USER_REPLY_TEXT = os.environ.get(
-    "USER_REPLY_TEXT",
-    "\u274c Don't send me messages directly, I'm only a file store bot.",
+    "USER_REPLY_TEXT", "\u274c Don't send me messages directly, I'm only a file store bot."
 )
 
 # True = only ADMINS can create clones with /clone
