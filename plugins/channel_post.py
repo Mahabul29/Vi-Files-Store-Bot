@@ -14,7 +14,7 @@ async def new_post(client, message):
     string = f"get-{message.id * abs(CHANNEL_ID)}"
     link = f"https://t.me/{client.username}?start={await encode(string)}"
     markup = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("ðŸ” Share URL", url=f"https://telegram.me/share/url?url={link}")]]
+        [[InlineKeyboardButton("\U0001f501 Share URL", url=f"https://telegram.me/share/url?url={link}")]]
     )
     try:
         await message.edit_reply_markup(markup)
