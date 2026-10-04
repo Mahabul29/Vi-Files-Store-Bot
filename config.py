@@ -54,8 +54,9 @@ FORCE_PIC = os.environ.get("FORCE_PIC", "")
 
 START_MESSAGE = os.environ.get(
     "START_MESSAGE",
-    "<b>Hello {first}!\n\nI store posts and files in a private channel and "
-    "share them through special links.</b>",
+    "<i>Hello {mention} ✨\n\nI am a permanent file store bot and users can access "
+    "stored messages by using a shareable link given by me\n\n"
+    "To know more click help button</i>",
 )
 FORCE_SUB_MESSAGE = os.environ.get(
     "FORCE_SUB_MESSAGE",
@@ -63,7 +64,7 @@ FORCE_SUB_MESSAGE = os.environ.get(
     "Join below, then tap <u>Try Again</u>.</b>",
 )
 USER_REPLY_TEXT = os.environ.get(
-    "USER_REPLY_TEXT", "âŒ Don't send me messages directly, I'm only a file store bot."
+    "USER_REPLY_TEXT", "❌ Don't send me messages directly, I'm only a file store bot."
 )
 
 # True = only ADMINS can create clones with /clone
