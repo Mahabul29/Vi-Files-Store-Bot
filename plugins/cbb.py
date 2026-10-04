@@ -8,10 +8,10 @@ from plugins.settings import CLONE_HELP
 from state import STATE
 
 HELP_TEXT = (
-    "<b>📖 Help</b>\n\n"
-    "• Open a shared link to get the stored files.\n"
-    "• If asked, join the required channel(s), then tap <b>Try Again</b>.\n"
-    "• Files may be auto deleted after some time — forward them to your saved messages.\n\n"
+    "<b>\U0001f4d6 Help</b>\n\n"
+    "\u2022 Open a shared link to get the stored files.\n"
+    "\u2022 If asked, join the required channel(s), then tap <b>Try Again</b>.\n"
+    "\u2022 Files may be auto deleted after some time \u2014 forward them to your saved messages.\n\n"
     "<b>Want your own bot?</b> Tap <b>CREATE MY OWN CLONE</b>."
 )
 
@@ -39,8 +39,8 @@ async def cb_handler(client, query):
     elif data == "about":
         await _edit(
             query,
-            f"<b>○ Bot: @{client.username}\n○ Language: Python 3\n"
-            "○ Library: Pyrogram\n○ Database: MongoDB</b>",
+            f"<b>\u25cb Bot: @{client.username}\n\u25cb Language: Python 3\n"
+            "\u25cb Library: Pyrogram\n\u25cb Database: MongoDB</b>",
             _nav(),
         )
 
@@ -62,4 +62,3 @@ async def cb_handler(client, query):
         except Exception:
             pass
     await query.answer()
-    
