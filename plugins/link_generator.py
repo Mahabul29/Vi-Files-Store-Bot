@@ -1,9 +1,11 @@
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+import asyncio
 import os
 
 from bot import Bot, MAIN
+from config import CHANNEL_ID, LOGGER
 from database.database import db
 from helper_func import admins, encode, get_message_id
 from state import STATE, in_state
@@ -31,7 +33,7 @@ can_store = filters.create(_can_store)
 async def _send_link(client, message, string):
     link = f"https://t.me/{client.username}?start={await encode(string)}"
     markup = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("ðŸ” Share URL", url=f"https://telegram.me/share/url?url={link}")]]
+        [[InlineKeyboardButton("🔁 Share URL", url=f"https://telegram.me/share/url?url={link}")]]
     )
     await message.reply_text(
         f"<b>Here is your link:</b>\n\n{link}",
@@ -45,11 +47,39 @@ def _ready(client):
     return bool(client.cfg["db_channel"] and client.db_channel)
 
 
-NOT_READY = ("âš ï¸ DB channel isn't available. Make sure this bot is admin (post rights) "
+NOT_READY = ("⚠️ DB channel isn't available. Make sure this bot is admin (post rights) "
              "in the DB channel.")
 
 
 # ---------- store files sent by admins/owner into the DB channel ----------
+
+ARCHIVE_SEM = asyncio.Semaphore(2)
+MAX_ARCHIVE = 2000 * 1024 * 1024  # Telegram bots can't download files above ~2GB
+
+
+async def _archive(client, message, file_no, caption, media):
+    """Background: copy a clone's file into the main DB channel via the main bot."""
+    main = MAIN.get("bot")
+    if not main or not main.db_channel:
+        return
+    if (getattr(media, "file_size", 0) or 0) > MAX_ARCHIVE:
+        LOGGER.info(f"[{client.username}] file #{file_no} too big to archive (link still works).")
+        return
+    async with ARCHIVE_SEM:
+        path = None
+        try:
+            path = await client.download_media(message)
+            sent = await main.send_document(CHANNEL_ID, path, caption=caption)
+            await db.set_archive(client.bot_id, file_no, sent.id)
+        except Exception as e:
+            LOGGER.warning(f"[{client.username}] archive of file #{file_no} failed: {e}")
+        finally:
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
+
 
 @Bot.on_message(filters.private & admins & MEDIA & can_store & ~filters.regex(r"^/"))
 async def store(client, message):
@@ -59,41 +89,22 @@ async def store(client, message):
     caption = message.caption.html if message.caption else ""
 
     if client.is_clone:
-        # download via the clone, archive in the main DB channel through the main bot
-        main = MAIN.get("bot")
-        if not main or not main.db_channel:
-            return await message.reply_text("âš ï¸ Main bot isn't ready yet. Try again shortly.", quote=True)
-        note = await message.reply_text("â³ Storing...", quote=True)
-        path = None
-        try:
-            path = await client.download_media(message)
-            sent = await main.send_document(ch, path, caption=caption)
-            media = getattr(message, message.media.value)
-            await db.add_file(client.bot_id, sent.id, media.file_id, caption)
-            new_id = sent.id
-        except Exception as e:
-            return await note.edit_text(f"âŒ Couldn't store: <code>{e}</code>")
-        finally:
-            if path and os.path.exists(path):
-                try:
-                    os.remove(path)
-                except Exception:
-                    pass
-        try:
-            await note.delete()
-        except Exception:
-            pass
+        # Instant: link uses the clone's own file_id; archiving to the main channel runs in background
+        media = getattr(message, message.media.value)
+        new_id = await db.next_file_id(client.bot_id)
+        await db.add_file(client.bot_id, new_id, media.file_id, caption)
+        asyncio.create_task(_archive(client, message, new_id, caption, media))
     else:
         try:
             copied = await message.copy(ch)
         except Exception as e:
-            return await message.reply_text(f"âŒ Couldn't store: <code>{e}</code>", quote=True)
+            return await message.reply_text(f"❌ Couldn't store: <code>{e}</code>", quote=True)
         new_id = copied.id
 
     st = STATE.get(_key(client, message))
     if st:  # batch collect mode
         st["ids"].append(new_id)
-        return await message.reply_text(f"âœ… Added ({len(st['ids'])}). Send more or /done.", quote=True)
+        return await message.reply_text(f"✅ Added ({len(st['ids'])}). Send more or /done.", quote=True)
     await _send_link(client, message, f"get-{new_id * abs(ch)}")
 
 
@@ -135,7 +146,7 @@ async def done(client, message):
     STATE.pop(key, None)
     ids = st["ids"]
     if not ids:
-        return await message.reply_text("âŒ You didn't send any files.")
+        return await message.reply_text("❌ You didn't send any files.")
     abs_ch = abs(client.cfg["db_channel"])
     if len(ids) == 1:
         return await _send_link(client, message, f"get-{ids[0] * abs_ch}")
@@ -160,7 +171,7 @@ async def collect(client, message):
     msg_id = await get_message_id(client, message)
     if not msg_id:
         return await message.reply_text(
-            "âŒ That isn't from the DB channel. Forward again or /cancel.", quote=True
+            "❌ That isn't from the DB channel. Forward again or /cancel.", quote=True
         )
     abs_ch = abs(client.cfg["db_channel"])
     if st["mode"] == "lg_single":
