@@ -2,7 +2,25 @@ from pyrogram import filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot import Bot
-from helper_func import START_BUTTONS, fill
+from config import CLONE_ADMIN_ONLY
+from helper_func import fill, is_admin, start_buttons
+from plugins.settings import CLONE_HELP
+from state import STATE
+
+HELP_TEXT = (
+    "<b>📖 Help</b>\n\n"
+    "• Open a shared link to get the stored files.\n"
+    "• If asked, join the required channel(s), then tap <b>Try Again</b>.\n"
+    "• Files may be auto deleted after some time — forward them to your saved messages.\n\n"
+    "<b>Want your own bot?</b> Tap <b>CREATE MY OWN CLONE</b>."
+)
+
+
+def _nav():
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("BACK", callback_data="start"),
+        InlineKeyboardButton("CLOSE", callback_data="close"),
+    ]])
 
 
 async def _edit(query, text, markup):
@@ -12,21 +30,31 @@ async def _edit(query, text, markup):
         await query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
 
 
-@Bot.on_callback_query(filters.regex(r"^(about|start|close)$"))
+@Bot.on_callback_query(filters.regex(r"^(help|about|clone|start|close)$"))
 async def cb_handler(client, query):
     data = query.data
-    if data == "about":
+    if data == "help":
+        await _edit(query, HELP_TEXT, _nav())
+
+    elif data == "about":
         await _edit(
             query,
-            f"<b>â—‹ Bot: @{client.username}\nâ—‹ Language: Python 3\n"
-            "â—‹ Library: Pyrogram\nâ—‹ Database: MongoDB</b>",
-            InlineKeyboardMarkup([[
-                InlineKeyboardButton("â¬…ï¸ Back", callback_data="start"),
-                InlineKeyboardButton("ðŸ”’ Close", callback_data="close"),
-            ]]),
+            f"<b>○ Bot: @{client.username}\n○ Language: Python 3\n"
+            "○ Library: Pyrogram\n○ Database: MongoDB</b>",
+            _nav(),
         )
+
+    elif data == "clone":  # main bot only (clones use a URL button)
+        if CLONE_ADMIN_ONLY and not is_admin(client, query.from_user.id):
+            return await query.answer("Only admins can create clones.", show_alert=True)
+        STATE[(client.bot_id, query.from_user.id)] = {"mode": "cl_token"}
+        await _edit(query, CLONE_HELP, InlineKeyboardMarkup(
+            [[InlineKeyboardButton("BACK", callback_data="start")]]))
+
     elif data == "start":
-        await _edit(query, fill(client.cfg["start_msg"], query.from_user), START_BUTTONS)
+        STATE.pop((client.bot_id, query.from_user.id), None)
+        await _edit(query, fill(client.cfg["start_msg"], query.from_user), start_buttons(client))
+
     elif data == "close":
         await query.message.delete()
         try:
@@ -34,3 +62,4 @@ async def cb_handler(client, query):
         except Exception:
             pass
     await query.answer()
+    
