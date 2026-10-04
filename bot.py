@@ -3,19 +3,19 @@ from datetime import datetime
 
 from aiohttp import web
 from pyrogram import Client, enums
-from pyrogram.types import ChatPrivileges
+from pyrogram.types import BotCommand, BotCommandScopeChat, BotCommandScopeDefault, ChatPrivileges
 
 from config import (
     API_HASH, APP_ID, BOT_TOKEN, CHANNEL_ID, FILE_AUTO_DELETE, FORCE_PIC,
-    FORCE_SUB_CHANNELS, FORCE_SUB_MESSAGE, LOGGER, OWNER_ID, PORT, PROTECT_CONTENT,
+    ADMINS, FORCE_SUB_CHANNELS, FORCE_SUB_MESSAGE, LOGGER, OWNER_ID, PORT, PROTECT_CONTENT,
     START_MESSAGE, START_PIC, TG_BOT_WORKERS,
 )
 from database.database import db
 
 CLONES = {}  # bot_id -> Bot instance
 MAIN = {}  # {'bot': main Bot instance}
-OLD_START = ("<b>𝙷𝚎𝚕𝚕𝚘 {first}!\n\n𝙸 𝚜𝚝𝚘𝚛𝚎 𝚙𝚘𝚜𝚝𝚜 𝚊𝚗𝚍 𝚏𝚒𝚕𝚎𝚜 𝚒𝚗 𝚊 𝚙𝚛𝚒𝚟𝚊𝚝𝚎 𝚌𝚑𝚊𝚗𝚗𝚎𝚕 𝚊𝚗𝚍 "
-             "𝚜𝚑𝚊𝚛𝚎 𝚝𝚑𝚎𝚖 𝚝𝚑𝚛𝚘𝚞𝚐𝚑 𝚜𝚙𝚎𝚌𝚒𝚊𝚕 𝚕𝚒𝚗𝚔𝚜.</b>")
+OLD_START = ("<b>Hello {first}!\n\nI store posts and files in a private channel and "
+             "share them through special links.</b>")
 MAIN_SAVED = ("auto_delete",)  # settings the main bot persists in DB
 
 
@@ -34,6 +34,7 @@ def default_cfg(is_clone: bool) -> dict:
         "short_api": "",
         "token_hours": 24,
         "db_channel": CHANNEL_ID,  # clones share the main DB channel by default
+        "own_channel": 0,  # clone owner's own channel used by /batch (clones only)
         "mode": "public",  # public / private
         "active": True,
     }
@@ -61,12 +62,50 @@ class Bot(Client):
         self.username = None
         self.display_name = ""
         self.db_channel = None
+        self.own_chat = None  # clone: the owner's own channel (chat object)
+        self.pic_id = None  # cached file_id of the start picture for this bot
         self.runner = None
         self.uptime = datetime.now()
 
     async def save_cfg(self):
         keys = MAIN_SAVED if not self.is_clone else tuple(self.cfg.keys())
         await db.set_settings(self.bot_id, {k: self.cfg[k] for k in keys})
+
+    async def set_commands(self):
+        """Fill the bot's command menu automatically (everyone + extra for admins)."""
+        C = BotCommand
+        user_cmds = [C("start", "Start the bot")]
+        if not self.is_clone:
+            user_cmds += [C("clone", "Create or manage your clones"),
+                          C("settings", "Manage your clones")]
+        user_cmds += [C("id", "Show your Telegram ID"), C("ping", "Check the bot"),
+                      C("cancel", "Cancel the current action")]
+        admin_cmds = user_cmds + [
+            C("genlink", "Get a link for one file/message"),
+            C("batch", "Get one link for many files"),
+            C("done", "Finish a batch"),
+            C("users", "Total users"),
+            C("stats", "Bot stats"),
+            C("autodelete", "Set auto delete time"),
+            C("broadcast", "Broadcast a message (reply to it)"),
+        ]
+        if not self.is_clone:
+            admin_cmds += [C("clones", "List running clones"), C("delclone", "Remove a clone")]
+        try:
+            await self.set_bot_commands(user_cmds, scope=BotCommandScopeDefault())
+        except Exception as e:
+            LOGGER.warning(f"[{self.username}] Setting commands failed: {e}")
+            return
+        ids = {self.owner_id, *self.cfg["mods"]}
+        if not self.is_clone:
+            ids |= set(ADMINS)
+        for uid in ids:
+            if not uid:
+                continue
+            try:  # fails for people who never opened the bot - harmless
+                await self.set_bot_commands(admin_cmds, scope=BotCommandScopeChat(uid))
+            except Exception:
+                pass
 
     async def setup_force(self):
         links, titles, chans = {}, {}, []
@@ -80,8 +119,8 @@ class Bot(Client):
                 titles[ch] = chat.title or str(ch)
                 chans.append(ch)
             except Exception as e:
-                LOGGER.warning(f"[{self.username}] 𝙵𝚘𝚛𝚌𝚎 𝚜𝚞𝚋 𝚌𝚑𝚊𝚗𝚗𝚎𝚕 {ch} 𝚜𝚔𝚒𝚙𝚙𝚎𝚍: {e}. "
-                               "𝙼𝚊𝚔𝚎 𝚝𝚑𝚎 𝚋𝚘𝚝 𝚊𝚍𝚖𝚒𝚗 𝚠𝚒𝚝𝚑 𝚒𝚗𝚟𝚒𝚝𝚎-𝚕𝚒𝚗𝚔 𝚙𝚎𝚛𝚖𝚒𝚜𝚜𝚒𝚘𝚗.")
+                LOGGER.warning(f"[{self.username}] Force sub channel {ch} skipped: {e}. "
+                               "Make the bot admin with invite-link permission.")
         self.invitelinks, self.fsub_titles, self.force_channels = links, titles, chans
 
     async def setup_db_channel(self) -> bool:
@@ -91,12 +130,12 @@ class Bot(Client):
             return False
         try:
             chat = await self.get_chat(ch)
-            test = await self.send_message(chat.id, "𝚃𝚎𝚜𝚝 𝙼𝚎𝚜𝚜𝚊𝚐𝚎")
+            test = await self.send_message(chat.id, "Test Message")
             await test.delete()
             self.db_channel = chat
             return True
         except Exception as e:
-            LOGGER.error(f"[{self.username}] 𝙲𝚊𝚗𝚗𝚘𝚝 𝚊𝚌𝚌𝚎𝚜𝚜 𝙳𝙱 𝚌𝚑𝚊𝚗𝚗𝚎𝚕 {ch}: {e}")
+            LOGGER.error(f"[{self.username}] Cannot access DB channel {ch}: {e}")
             self.db_channel = None
             return False
 
@@ -118,13 +157,20 @@ class Bot(Client):
         self.set_parse_mode(enums.ParseMode.HTML)
 
         await self.setup_force()
+        await self.set_commands()
+
+        if self.is_clone and self.cfg.get("own_channel"):
+            try:
+                self.own_chat = await self.get_chat(self.cfg["own_channel"])
+            except Exception as e:
+                LOGGER.warning(f"[{self.username}] Own channel unavailable: {e}")
 
         if not self.is_clone:
             MAIN['bot'] = self
         # clones store files through the main bot, so only the main bot needs the channel
         if not self.is_clone and not await self.setup_db_channel():
             await super().stop()
-            raise RuntimeError("𝙱𝚘𝚝 𝚖𝚞𝚜𝚝 𝚋𝚎 𝚊𝚍𝚖𝚒𝚗 𝚒𝚗 𝚝𝚑𝚎 𝙳𝙱 𝚌𝚑𝚊𝚗𝚗𝚎𝚕 (𝚌𝚑𝚎𝚌𝚔 𝙲𝙷𝙰𝙽𝙽𝙴𝙻_𝙸𝙳).")
+            raise RuntimeError("Bot must be admin in the DB channel (check CHANNEL_ID).")
 
         if not self.is_clone:
             from plugins.web_server import web_server
@@ -132,21 +178,21 @@ class Bot(Client):
             await self.runner.setup()
             await web.TCPSite(self.runner, "0.0.0.0", PORT).start()
 
-        LOGGER.info(f"𝙱𝚘𝚝 𝚛𝚞𝚗𝚗𝚒𝚗𝚐 𝚊𝚜 @{self.username}")
+        LOGGER.info(f"Bot running as @{self.username}")
 
     async def stop(self, *args):
         if self.runner:
             await self.runner.cleanup()
         await super().stop()
-        LOGGER.info(f"𝙱𝚘𝚝 @{self.username} 𝚜𝚝𝚘𝚙𝚙𝚎𝚍.")
+        LOGGER.info(f"Bot @{self.username} stopped.")
 
 
 async def start_clone(token: str, owner_id: int) -> "Bot":
     if token == BOT_TOKEN:
-        raise RuntimeError("𝚈𝚘𝚞 𝚌𝚊𝚗'𝚝 𝚌𝚕𝚘𝚗𝚎 𝚝𝚑𝚎 𝚖𝚊𝚒𝚗 𝚋𝚘𝚝 𝚝𝚘𝚔𝚎𝚗.")
+        raise RuntimeError("You can't clone the main bot token.")
     bot_id = token.split(":")[0]
     if bot_id in CLONES:
-        raise RuntimeError("𝚃𝚑𝚒𝚜 𝚋𝚘𝚝 𝚒𝚜 𝚊𝚕𝚛𝚎𝚊𝚍𝚢 𝚌𝚕𝚘𝚗𝚎𝚍.")
+        raise RuntimeError("This bot is already cloned.")
     clone = Bot(name=f"clone_{bot_id}", token=token, is_clone=True, owner_id=owner_id, bot_id=bot_id)
     await clone.start()
     CLONES[bot_id] = clone
@@ -159,7 +205,7 @@ async def stop_clone(bot_id: str):
         try:
             await c.stop()
         except Exception as e:
-            LOGGER.warning(f"𝚂𝚝𝚘𝚙𝚙𝚒𝚗𝚐 𝚌𝚕𝚘𝚗𝚎 {bot_id} 𝚏𝚊𝚒𝚕𝚎𝚍: {e}")
+            LOGGER.warning(f"Stopping clone {bot_id} failed: {e}")
 
 
 async def ensure_db_access(main, clone) -> bool:
@@ -174,7 +220,7 @@ async def ensure_db_access(main, clone) -> bool:
                 can_post_messages=True, can_edit_messages=True, can_delete_messages=True),
         )
     except Exception as e:
-        LOGGER.warning(f"𝙰𝚞𝚝𝚘-𝚙𝚛𝚘𝚖𝚘𝚝𝚎 𝚘𝚏 @{clone.username} 𝚒𝚗 𝙳𝙱 𝚌𝚑𝚊𝚗𝚗𝚎𝚕 𝚏𝚊𝚒𝚕𝚎𝚍: {e}")
+        LOGGER.warning(f"Auto-promote of @{clone.username} in DB channel failed: {e}")
     return await clone.setup_db_channel()
 
 
@@ -188,7 +234,7 @@ async def restart_clone(bot_id: str, main=None):
     try:
         new = await start_clone(token, owner)
     except Exception as e:
-        LOGGER.error(f"𝚁𝚎𝚜𝚝𝚊𝚛𝚝𝚒𝚗𝚐 𝚌𝚕𝚘𝚗𝚎 {bot_id} 𝚏𝚊𝚒𝚕𝚎𝚍: {e}")
+        LOGGER.error(f"Restarting clone {bot_id} failed: {e}")
         return None
     if main is not None:
         await ensure_db_access(main, new)
